@@ -10,16 +10,32 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CalendarRouteImport } from './routes/calendar'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as CoursesIndexRouteImport } from './routes/courses.index'
 import { Route as CoursesCourseIdRouteImport } from './routes/courses.$courseId'
 import { Route as CoursesCourseIdIndexRouteImport } from './routes/courses.$courseId.index'
+import { Route as CoursesCourseIdAssessmentsRouteImport } from './routes/courses.$courseId.assessments'
+import { Route as CoursesCourseIdFlashcardsRouteImport } from './routes/courses.$courseId.flashcards'
 import { Route as CoursesCourseIdMaterialsRouteImport } from './routes/courses.$courseId.materials'
 import { Route as CoursesCourseIdNotesRouteImport } from './routes/courses.$courseId.notes'
+import { Route as CoursesCourseIdQuizzesRouteImport } from './routes/courses.$courseId.quizzes'
 import { Route as CoursesCourseIdTopicsRouteImport } from './routes/courses.$courseId.topics'
+import { Route as CoursesCourseIdTutorRouteImport } from './routes/courses.$courseId.tutor'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CalendarRoute = CalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CoursesIndexRoute = CoursesIndexRouteImport.update({
@@ -37,6 +53,18 @@ const CoursesCourseIdIndexRoute = CoursesCourseIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => CoursesCourseIdRoute,
 } as any)
+const CoursesCourseIdAssessmentsRoute =
+  CoursesCourseIdAssessmentsRouteImport.update({
+    id: '/assessments',
+    path: '/assessments',
+    getParentRoute: () => CoursesCourseIdRoute,
+  } as any)
+const CoursesCourseIdFlashcardsRoute =
+  CoursesCourseIdFlashcardsRouteImport.update({
+    id: '/flashcards',
+    path: '/flashcards',
+    getParentRoute: () => CoursesCourseIdRoute,
+  } as any)
 const CoursesCourseIdMaterialsRoute =
   CoursesCourseIdMaterialsRouteImport.update({
     id: '/materials',
@@ -48,70 +76,118 @@ const CoursesCourseIdNotesRoute = CoursesCourseIdNotesRouteImport.update({
   path: '/notes',
   getParentRoute: () => CoursesCourseIdRoute,
 } as any)
+const CoursesCourseIdQuizzesRoute = CoursesCourseIdQuizzesRouteImport.update({
+  id: '/quizzes',
+  path: '/quizzes',
+  getParentRoute: () => CoursesCourseIdRoute,
+} as any)
 const CoursesCourseIdTopicsRoute = CoursesCourseIdTopicsRouteImport.update({
   id: '/topics',
   path: '/topics',
   getParentRoute: () => CoursesCourseIdRoute,
 } as any)
+const CoursesCourseIdTutorRoute = CoursesCourseIdTutorRouteImport.update({
+  id: '/tutor',
+  path: '/tutor',
+  getParentRoute: () => CoursesCourseIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/calendar': typeof CalendarRoute
+  '/settings': typeof SettingsRoute
   '/courses/$courseId': typeof CoursesCourseIdRouteWithChildren
   '/courses/': typeof CoursesIndexRoute
+  '/courses/$courseId/assessments': typeof CoursesCourseIdAssessmentsRoute
+  '/courses/$courseId/flashcards': typeof CoursesCourseIdFlashcardsRoute
   '/courses/$courseId/materials': typeof CoursesCourseIdMaterialsRoute
   '/courses/$courseId/notes': typeof CoursesCourseIdNotesRoute
+  '/courses/$courseId/quizzes': typeof CoursesCourseIdQuizzesRoute
   '/courses/$courseId/topics': typeof CoursesCourseIdTopicsRoute
+  '/courses/$courseId/tutor': typeof CoursesCourseIdTutorRoute
   '/courses/$courseId/': typeof CoursesCourseIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/calendar': typeof CalendarRoute
+  '/settings': typeof SettingsRoute
   '/courses': typeof CoursesIndexRoute
+  '/courses/$courseId/assessments': typeof CoursesCourseIdAssessmentsRoute
+  '/courses/$courseId/flashcards': typeof CoursesCourseIdFlashcardsRoute
   '/courses/$courseId/materials': typeof CoursesCourseIdMaterialsRoute
   '/courses/$courseId/notes': typeof CoursesCourseIdNotesRoute
+  '/courses/$courseId/quizzes': typeof CoursesCourseIdQuizzesRoute
   '/courses/$courseId/topics': typeof CoursesCourseIdTopicsRoute
+  '/courses/$courseId/tutor': typeof CoursesCourseIdTutorRoute
   '/courses/$courseId': typeof CoursesCourseIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/calendar': typeof CalendarRoute
+  '/settings': typeof SettingsRoute
   '/courses/$courseId': typeof CoursesCourseIdRouteWithChildren
   '/courses/': typeof CoursesIndexRoute
+  '/courses/$courseId/assessments': typeof CoursesCourseIdAssessmentsRoute
+  '/courses/$courseId/flashcards': typeof CoursesCourseIdFlashcardsRoute
   '/courses/$courseId/materials': typeof CoursesCourseIdMaterialsRoute
   '/courses/$courseId/notes': typeof CoursesCourseIdNotesRoute
+  '/courses/$courseId/quizzes': typeof CoursesCourseIdQuizzesRoute
   '/courses/$courseId/topics': typeof CoursesCourseIdTopicsRoute
+  '/courses/$courseId/tutor': typeof CoursesCourseIdTutorRoute
   '/courses/$courseId/': typeof CoursesCourseIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/calendar'
+    | '/settings'
     | '/courses/$courseId'
     | '/courses/'
+    | '/courses/$courseId/assessments'
+    | '/courses/$courseId/flashcards'
     | '/courses/$courseId/materials'
     | '/courses/$courseId/notes'
+    | '/courses/$courseId/quizzes'
     | '/courses/$courseId/topics'
+    | '/courses/$courseId/tutor'
     | '/courses/$courseId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/calendar'
+    | '/settings'
     | '/courses'
+    | '/courses/$courseId/assessments'
+    | '/courses/$courseId/flashcards'
     | '/courses/$courseId/materials'
     | '/courses/$courseId/notes'
+    | '/courses/$courseId/quizzes'
     | '/courses/$courseId/topics'
+    | '/courses/$courseId/tutor'
     | '/courses/$courseId'
   id:
     | '__root__'
     | '/'
+    | '/calendar'
+    | '/settings'
     | '/courses/$courseId'
     | '/courses/'
+    | '/courses/$courseId/assessments'
+    | '/courses/$courseId/flashcards'
     | '/courses/$courseId/materials'
     | '/courses/$courseId/notes'
+    | '/courses/$courseId/quizzes'
     | '/courses/$courseId/topics'
+    | '/courses/$courseId/tutor'
     | '/courses/$courseId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CalendarRoute: typeof CalendarRoute
+  SettingsRoute: typeof SettingsRoute
   CoursesCourseIdRoute: typeof CoursesCourseIdRouteWithChildren
   CoursesIndexRoute: typeof CoursesIndexRoute
 }
@@ -123,6 +199,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/calendar': {
+      id: '/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof CalendarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/courses/': {
@@ -146,6 +236,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CoursesCourseIdIndexRouteImport
       parentRoute: typeof CoursesCourseIdRoute
     }
+    '/courses/$courseId/assessments': {
+      id: '/courses/$courseId/assessments'
+      path: '/assessments'
+      fullPath: '/courses/$courseId/assessments'
+      preLoaderRoute: typeof CoursesCourseIdAssessmentsRouteImport
+      parentRoute: typeof CoursesCourseIdRoute
+    }
+    '/courses/$courseId/flashcards': {
+      id: '/courses/$courseId/flashcards'
+      path: '/flashcards'
+      fullPath: '/courses/$courseId/flashcards'
+      preLoaderRoute: typeof CoursesCourseIdFlashcardsRouteImport
+      parentRoute: typeof CoursesCourseIdRoute
+    }
     '/courses/$courseId/materials': {
       id: '/courses/$courseId/materials'
       path: '/materials'
@@ -160,6 +264,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CoursesCourseIdNotesRouteImport
       parentRoute: typeof CoursesCourseIdRoute
     }
+    '/courses/$courseId/quizzes': {
+      id: '/courses/$courseId/quizzes'
+      path: '/quizzes'
+      fullPath: '/courses/$courseId/quizzes'
+      preLoaderRoute: typeof CoursesCourseIdQuizzesRouteImport
+      parentRoute: typeof CoursesCourseIdRoute
+    }
     '/courses/$courseId/topics': {
       id: '/courses/$courseId/topics'
       path: '/topics'
@@ -167,20 +278,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CoursesCourseIdTopicsRouteImport
       parentRoute: typeof CoursesCourseIdRoute
     }
+    '/courses/$courseId/tutor': {
+      id: '/courses/$courseId/tutor'
+      path: '/tutor'
+      fullPath: '/courses/$courseId/tutor'
+      preLoaderRoute: typeof CoursesCourseIdTutorRouteImport
+      parentRoute: typeof CoursesCourseIdRoute
+    }
   }
 }
 
 interface CoursesCourseIdRouteChildren {
+  CoursesCourseIdAssessmentsRoute: typeof CoursesCourseIdAssessmentsRoute
+  CoursesCourseIdFlashcardsRoute: typeof CoursesCourseIdFlashcardsRoute
   CoursesCourseIdMaterialsRoute: typeof CoursesCourseIdMaterialsRoute
   CoursesCourseIdNotesRoute: typeof CoursesCourseIdNotesRoute
+  CoursesCourseIdQuizzesRoute: typeof CoursesCourseIdQuizzesRoute
   CoursesCourseIdTopicsRoute: typeof CoursesCourseIdTopicsRoute
+  CoursesCourseIdTutorRoute: typeof CoursesCourseIdTutorRoute
   CoursesCourseIdIndexRoute: typeof CoursesCourseIdIndexRoute
 }
 
 const CoursesCourseIdRouteChildren: CoursesCourseIdRouteChildren = {
+  CoursesCourseIdAssessmentsRoute: CoursesCourseIdAssessmentsRoute,
+  CoursesCourseIdFlashcardsRoute: CoursesCourseIdFlashcardsRoute,
   CoursesCourseIdMaterialsRoute: CoursesCourseIdMaterialsRoute,
   CoursesCourseIdNotesRoute: CoursesCourseIdNotesRoute,
+  CoursesCourseIdQuizzesRoute: CoursesCourseIdQuizzesRoute,
   CoursesCourseIdTopicsRoute: CoursesCourseIdTopicsRoute,
+  CoursesCourseIdTutorRoute: CoursesCourseIdTutorRoute,
   CoursesCourseIdIndexRoute: CoursesCourseIdIndexRoute,
 }
 
@@ -190,6 +316,8 @@ const CoursesCourseIdRouteWithChildren = CoursesCourseIdRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CalendarRoute: CalendarRoute,
+  SettingsRoute: SettingsRoute,
   CoursesCourseIdRoute: CoursesCourseIdRouteWithChildren,
   CoursesIndexRoute: CoursesIndexRoute,
 }
