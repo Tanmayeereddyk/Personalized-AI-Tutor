@@ -13,6 +13,8 @@ interface Store {
   materials: Material[];
   addMaterials: (m: Material[]) => void;
   updateMaterial: (id: string, patch: Partial<Material>) => void;
+  addCourseOpen: boolean;
+  setAddCourseOpen: (o: boolean) => void;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -20,6 +22,7 @@ const Ctx = createContext<Store | null>(null);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [courses, setCourses] = useState<Course[]>(data.courses);
   const [materials, setMaterials] = useState<Material[]>(data.materials);
+  const [addCourseOpen, setAddCourseOpen] = useState(false);
 
   const addCourse: Store["addCourse"] = (c) => {
     const base = c.code.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "course";
@@ -38,6 +41,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         courses,
         addCourse,
         materials,
+        addCourseOpen,
+        setAddCourseOpen,
         addMaterials: (m) => setMaterials((prev) => [...m, ...prev]),
         updateMaterial: (id, patch) =>
           setMaterials((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x))),
