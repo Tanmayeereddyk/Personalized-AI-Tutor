@@ -17,7 +17,7 @@ export function getGreeting(name: string, d: Date) {
     : `Still studying, ${name}? 👀`;
   // Stable per day + time-of-day block, so refreshes don't reshuffle it.
   const dayIndex = Math.floor(d.getTime() / 86_400_000);
-  const sub = subtitles[(dayIndex + Math.floor(h / 6)) % subtitles.length];
+  const sub = subtitles[(dayIndex + Math.floor(h / 6)) % subtitles.length] ?? subtitles[0]!;
   return { title, sub };
 }
 

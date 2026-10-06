@@ -72,7 +72,7 @@ function Flashcards() {
 function Deck() {
   const [i, setI] = useState(0);
   const [flip, setFlip] = useState(false);
-  const card = sampleFlashcards[i];
+  const card = sampleFlashcards[i] ?? sampleFlashcards[0]!;
   const go = (d: number) => { setFlip(false); setI((x) => (x + d + sampleFlashcards.length) % sampleFlashcards.length); };
   return (
     <div>
