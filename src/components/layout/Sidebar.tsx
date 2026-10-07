@@ -1,7 +1,8 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { LayoutGrid, Library, CalendarDays, Plus, Settings, Sparkles, User, Palette, LogOut, ChevronsUpDown } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { CourseBadge } from "@/components/ui/kit";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,8 @@ const nav = [
 /** compact = icon-only rail (tablet). */
 export function Sidebar({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
   const { courses, user, setAddCourseOpen } = useStore();
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const isActive = (to: string) => (to === "/" ? path === "/" : path === to);
 
@@ -100,7 +103,7 @@ export function Sidebar({ compact = false, onNavigate }: { compact?: boolean; on
                 </DropdownMenu.Item>
               ))}
               <DropdownMenu.Separator className="my-1 h-px bg-border" />
-              <DropdownMenu.Item className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-destructive outline-none data-[highlighted]:bg-secondary">
+              <DropdownMenu.Item onSelect={() => { logout(); onNavigate?.(); navigate({ to: "/login" }); }} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-destructive outline-none data-[highlighted]:bg-secondary">
                 <LogOut className="h-4 w-4" />Log out
               </DropdownMenu.Item>
             </DropdownMenu.Content>

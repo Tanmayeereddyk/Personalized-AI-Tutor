@@ -4,7 +4,7 @@ import { useStore } from "@/lib/store";
 import { Greeting } from "@/components/dashboard/Greeting";
 import { CourseCard, AddCourseCard } from "@/components/courses/CourseCard";
 import { CourseBadge, EmptyState, ProgressBar } from "@/components/ui/kit";
-import { calendarEvents } from "@/lib/mockData";
+import { useEvents, sortEvents, todayKey, formatTime } from "@/lib/events";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -20,11 +20,13 @@ export const Route = createFileRoute("/")({
 
 function Dashboard() {
   const { user, courses, setAddCourseOpen } = useStore();
+  const { events } = useEvents();
+  const upcoming = events.filter((e) => e.date >= todayKey()).sort(sortEvents).slice(0, 4);
   const resume = courses.find((c) => c.currentTopic) ?? courses[0];
 
   return (
     <div className="space-y-10">
-      <Greeting name={user.name} />
+      <Greeting name={user.name.split(" ")[0]!} />
 
       {resume && (
         <section className="card glow-bg fade-up relative overflow-hidden p-6 sm:p-8" style={{ animationDelay: "80ms" }}>
@@ -80,7 +82,8 @@ function Dashboard() {
       <section>
         <h2 className="mb-4 text-lg font-semibold">Coming up</h2>
         <div className="card divide-y">
-          {calendarEvents.slice(0, 4).map((e) => {
+          {upcoming.length === 0 && <div className="px-5 py-6 text-sm text-muted-foreground">No upcoming events</div>}
+          {upcoming.map((e) => {
             const d = new Date(e.date + "T00:00:00");
             return (
               <div key={e.id} className="flex items-center gap-4 px-5 py-3.5">
@@ -88,8 +91,8 @@ function Dashboard() {
                   <div className="text-[10px] uppercase text-muted-foreground">{d.toLocaleString("en", { month: "short" })}</div>
                   <div className="font-mono text-lg font-medium">{d.getDate()}</div>
                 </div>
-                <div className="flex-1 text-sm">{e.title}</div>
-                <span className="chip capitalize">{e.kind}</span>
+                <div className="flex-1 text-sm">{e.title}<div className="text-xs text-muted-foreground">{formatTime(e)}</div></div>
+                {e.kind && <span className="chip capitalize">{e.kind}</span>}
               </div>
             );
           })}

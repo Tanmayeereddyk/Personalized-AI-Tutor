@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import * as data from "./mockData";
+import { useAuth } from "./auth";
 import type { Course, Material } from "./types";
 
 /**
@@ -20,6 +21,8 @@ interface Store {
 const Ctx = createContext<Store | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
+  const auth = useAuth();
+  const user = auth.user ? { ...data.currentUser, name: auth.user.name } : data.currentUser;
   const [courses, setCourses] = useState<Course[]>(data.courses);
   const [materials, setMaterials] = useState<Material[]>(data.materials);
   const [addCourseOpen, setAddCourseOpen] = useState(false);
@@ -37,7 +40,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider
       value={{
-        user: data.currentUser,
+        user,
         courses,
         addCourse,
         materials,
