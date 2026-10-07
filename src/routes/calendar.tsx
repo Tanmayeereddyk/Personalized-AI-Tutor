@@ -183,19 +183,19 @@ function CalendarPage() {
 
 function EventForm({ mode, initial, onCancel, onSave }: { mode: "add" | "edit"; initial: Draft; onCancel: () => void; onSave: (d: Draft) => void }) {
   const [d, setD] = useState(initial);
-  const [err, setErr] = useState<Record<string, string>>({});
+  const [err, setErr] = useState<Partial<Record<"title" | "date" | "endTime", string>>>({});
   const set = (k: keyof Draft) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setD({ ...d, [k]: e.target.value });
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const errs: Record<string, string> = {};
+    const errs: Partial<Record<"title" | "date" | "endTime", string>> = {};
     if (!d.title.trim()) errs.title = "Title is required.";
     if (!d.date) errs.date = "Date is required.";
     if (d.startTime && d.endTime && d.endTime <= d.startTime) errs.endTime = "End time must be after start time.";
     if (Object.keys(errs).length) return setErr(errs);
     onSave(d);
   };
-  const E = ({ k }: { k: string }) => (err[k] ? <p className="mt-1.5 text-xs text-destructive">{err[k]}</p> : null);
+  const E = ({ k }: { k: "title" | "date" | "endTime" }) => (err[k] ? <p className="mt-1.5 text-xs text-destructive">{err[k]}</p> : null);
 
   return (
     <Modal open onOpenChange={(o) => !o && onCancel()} title={mode === "add" ? "Add event" : "Edit event"}>

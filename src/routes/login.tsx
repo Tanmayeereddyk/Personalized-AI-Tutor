@@ -22,11 +22,11 @@ function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Partial<Record<"email" | "password" | "form", string>>>({});
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const errs: Record<string, string> = {};
+    const errs: Partial<Record<"email" | "password" | "form", string>> = {};
     if (!email.trim()) errs.email = "Email is required.";
     else if (!/^\S+@\S+\.\S+$/.test(email)) errs.email = "Enter a valid email address.";
     if (!password) errs.password = "Password is required.";

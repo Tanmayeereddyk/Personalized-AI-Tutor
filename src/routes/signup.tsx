@@ -20,12 +20,12 @@ function SignupPage() {
   const { signup, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const [f, setF] = useState({ name: "", email: "", password: "", confirm: "" });
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Partial<Record<"name" | "email" | "password" | "confirm", string>>>({});
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const errs: Record<string, string> = {};
+    const errs: Partial<Record<"name" | "email" | "password" | "confirm", string>> = {};
     if (!f.name.trim()) errs.name = "Full name is required.";
     if (!f.email.trim()) errs.email = "Email is required.";
     else if (!/^\S+@\S+\.\S+$/.test(f.email)) errs.email = "Enter a valid email address.";
