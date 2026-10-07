@@ -89,7 +89,7 @@ function Dashboard() {
                   <div className="font-mono text-lg font-medium">{d.getDate()}</div>
                 </div>
                 <div className="flex-1 text-sm">{e.title}</div>
-                <span className="chip capitalize">{e.kind}</span>
+                {e.kind && <span className="chip capitalize">{e.kind}</span>}
               </div>
             );
           })}
