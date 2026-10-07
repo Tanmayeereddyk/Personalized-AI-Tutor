@@ -13,6 +13,9 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { StoreProvider } from "../lib/store";
+import { AuthProvider, useAuth } from "../lib/auth";
+import { Toaster } from "../components/ui/sonner";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { AppShell } from "../components/layout/AppShell";
 
 function NotFoundComponent() {
@@ -122,11 +125,36 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <StoreProvider>
-        <AppShell>
-          <Outlet />
-        </AppShell>
-      </StoreProvider>
+      <AuthProvider>
+        <StoreProvider>
+          <AuthGate />
+          <Toaster theme="dark" position="bottom-right" />
+        </StoreProvider>
+      </AuthProvider>
     </QueryClientProvider>
+  );
+}
+
+const PUBLIC = ["/login", "/signup"];
+
+/** Client-side guard for the mock auth: app pages require a session. */
+function AuthGate() {
+  const { user, ready } = useAuth();
+  const navigate = useNavigate();
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const isPublic = PUBLIC.includes(path);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!user && !isPublic) navigate({ to: "/login", replace: true });
+    if (user && isPublic) navigate({ to: "/", replace: true });
+  }, [ready, user, isPublic, navigate]);
+
+  if (isPublic) return <Outlet />;
+  if (!ready || !user) return <div className="min-h-screen" />;
+  return (
+    <AppShell>
+      <Outlet />
+    </AppShell>
   );
 }
