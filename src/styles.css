@@ -1,0 +1,146 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-sidebar: var(--sidebar);
+  --color-course-mint: var(--course-mint);
+  --color-course-sky: var(--course-sky);
+  --color-course-amber: var(--course-amber);
+  --color-course-rose: var(--course-rose);
+  --color-course-violet: var(--course-violet);
+  --color-course-lime: var(--course-lime);
+}
+
+:root {
+  --radius: 0.875rem;
+  --background: oklch(0.155 0.008 260);
+  --foreground: oklch(0.96 0.005 260);
+  --surface: oklch(0.19 0.009 260);
+  --surface-2: oklch(0.225 0.01 260);
+  --card: oklch(0.19 0.009 260);
+  --card-foreground: oklch(0.96 0.005 260);
+  --popover: oklch(0.21 0.01 260);
+  --popover-foreground: oklch(0.96 0.005 260);
+  --primary: oklch(0.87 0.16 168);
+  --primary-foreground: oklch(0.18 0.03 170);
+  --secondary: oklch(0.25 0.01 260);
+  --secondary-foreground: oklch(0.94 0.005 260);
+  --muted: oklch(0.24 0.01 260);
+  --muted-foreground: oklch(0.68 0.012 260);
+  --accent: oklch(0.27 0.012 260);
+  --accent-foreground: oklch(0.96 0.005 260);
+  --destructive: oklch(0.68 0.19 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --success: oklch(0.82 0.16 155);
+  --warning: oklch(0.82 0.15 70);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.87 0.16 168 / 60%);
+  --sidebar: oklch(0.135 0.007 260);
+  --course-mint: oklch(0.87 0.16 168);
+  --course-sky: oklch(0.78 0.13 230);
+  --course-amber: oklch(0.83 0.15 75);
+  --course-rose: oklch(0.75 0.16 10);
+  --course-violet: oklch(0.74 0.14 290);
+  --course-lime: oklch(0.88 0.17 125);
+  --gradient-glow: radial-gradient(60% 80% at 20% 0%, oklch(0.87 0.16 168 / 16%), transparent 70%);
+  --shadow-card: 0 1px 0 oklch(1 0 0 / 4%) inset, 0 10px 30px -15px oklch(0 0 0 / 60%);
+  --shadow-lift: 0 1px 0 oklch(1 0 0 / 6%) inset, 0 20px 40px -18px oklch(0 0 0 / 70%), 0 0 0 1px oklch(0.87 0.16 168 / 18%);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html { color-scheme: dark; }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: oklch(0.87 0.16 168 / 30%); }
+}
+
+@utility card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-card);
+}
+@utility lift {
+  transition: transform 0.25s cubic-bezier(.2,.8,.2,1), box-shadow 0.25s, border-color 0.25s;
+  &:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); }
+}
+@utility glow-bg { background-image: var(--gradient-glow); }
+@utility grid-bg {
+  background-image: linear-gradient(oklch(1 0 0 / 3%) 1px, transparent 1px), linear-gradient(90deg, oklch(1 0 0 / 3%) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse at top, black 30%, transparent 75%);
+}
+@utility btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  border-radius: 0.7rem; padding: 0.55rem 1rem; font-size: 0.875rem; font-weight: 500;
+  transition: all 0.2s; white-space: nowrap; cursor: pointer;
+  &:disabled { opacity: 0.45; pointer-events: none; }
+}
+@utility btn-primary {
+  background: var(--color-primary); color: var(--color-primary-foreground);
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 10%) inset, 0 8px 24px -10px oklch(0.87 0.16 168 / 60%);
+  &:hover { filter: brightness(1.08); transform: translateY(-1px); }
+}
+@utility btn-ghost {
+  background: var(--color-secondary); color: var(--color-secondary-foreground);
+  border: 1px solid var(--color-border);
+  &:hover { background: var(--color-accent); }
+}
+@utility chip {
+  display: inline-flex; align-items: center; gap: 0.35rem; border-radius: 999px;
+  padding: 0.15rem 0.6rem; font-size: 0.72rem; font-weight: 500;
+  background: var(--color-secondary); color: var(--color-muted-foreground);
+  border: 1px solid var(--color-border);
+}
+@utility field {
+  width: 100%; background: var(--color-background); border: 1px solid var(--color-input);
+  border-radius: 0.7rem; padding: 0.6rem 0.8rem; font-size: 0.875rem; outline: none; transition: border-color .2s, box-shadow .2s;
+  &:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-ring); }
+  &::placeholder { color: var(--color-muted-foreground); }
+}
+@utility fade-up { animation: fade-up 0.5s cubic-bezier(.2,.8,.2,1) both; }
+@utility bar-grow { animation: bar-grow 1s cubic-bezier(.2,.8,.2,1) both; transform-origin: left; }
+
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes bar-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
