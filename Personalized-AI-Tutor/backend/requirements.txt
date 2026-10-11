@@ -1,0 +1,17 @@
+# Web framework + server
+fastapi
+uvicorn[standard]
+
+# Data validation (used by FastAPI, listed explicitly)
+pydantic
+email-validator          # required by pydantic EmailStr (auth schemas)
+
+# Load .env files
+python-dotenv
+
+# Supabase client (Part 2: database + auth)
+supabase
+
+# Testing
+pytest
+httpx
