@@ -103,7 +103,7 @@ export function Sidebar({ compact = false, onNavigate }: { compact?: boolean; on
                 </DropdownMenu.Item>
               ))}
               <DropdownMenu.Separator className="my-1 h-px bg-border" />
-              <DropdownMenu.Item onSelect={() => { logout(); onNavigate?.(); navigate({ to: "/login" }); }} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-destructive outline-none data-[highlighted]:bg-secondary">
+              <DropdownMenu.Item onSelect={() => { void logout().finally(() => { onNavigate?.(); navigate({ to: "/login" }); }); }} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-destructive outline-none data-[highlighted]:bg-secondary">
                 <LogOut className="h-4 w-4" />Log out
               </DropdownMenu.Item>
             </DropdownMenu.Content>

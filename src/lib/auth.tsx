@@ -1,202 +1,108 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { apiRequest, ApiError } from "./api";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { api, clearToken, getToken, setToken } from "./api";
 
 /**
- * Authentication context backed by the FastAPI backend:
+ * Real authentication, backed by the FastAPI + Supabase backend.
  *
- *   POST /api/auth/signup   -> create the account (Supabase Auth)
- *   POST /api/auth/login    -> email/password sign-in, returns a token
- *   GET  /api/auth/me       -> validate the stored token, load profile
- *   POST /api/auth/logout   -> revoke the token at Supabase
- *
- * Only the access token is kept in localStorage. Passwords are
- * sent straight to the backend (which forwards them to Supabase
- * Auth) and are never stored on the client.
+ * The access token lives in localStorage and is attached to every API
+ * call by src/lib/api.ts. On mount we re-validate it with /api/auth/me so
+ * a stale or revoked token never leaves the UI in a "logged in" state.
+ * The cached query data is cleared whenever the signed-in user changes,
+ * so one account can never see another account's courses.
  */
-
 export interface AuthUser {
   id: string;
   name: string;
-  email: string | null;
+  email: string;
 }
 
-export type AuthResult =
-  { ok: true } | { ok: false; error: string; fields: Record<string, string> };
-
-export type SignupResult =
-  | { ok: true; requiresEmailConfirmation: true; message: string }
-  | { ok: true; requiresEmailConfirmation: false }
-  | { ok: false; error: string; fields: Record<string, string> };
+export interface SignupOutcome {
+  error?: string;
+  confirmationRequired?: boolean;
+  message?: string;
+}
 
 interface Auth {
   user: AuthUser | null;
   ready: boolean;
-  login: (email: string, password: string) => Promise<AuthResult>;
-  signup: (name: string, email: string, password: string) => Promise<SignupResult>;
+  login: (email: string, password: string) => Promise<string | null>;
+  signup: (name: string, email: string, password: string) => Promise<SignupOutcome>;
   logout: () => Promise<void>;
 }
 
-/** Backend response shapes (see app/schemas/auth.py). */
-interface AuthUserPayload {
-  id: string;
-  email: string | null;
-}
-interface SessionPayload {
-  access_token: string;
-  token_type: string;
-  user: AuthUserPayload;
-}
-interface SignupPayload {
-  message: string;
-  user: AuthUserPayload;
-  access_token: string | null;
-  token_type: string;
-}
-interface ProfilePayload {
-  id: string;
-  email: string | null;
-  full_name: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-}
-interface MePayload {
-  user: AuthUserPayload;
-  profile: ProfilePayload | null;
-}
-interface MessagePayload {
-  message: string;
-}
-
-const TOKEN_KEY = "studyai.access_token";
-
 const Ctx = createContext<Auth | null>(null);
-
-const readToken = (): string | null => {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-};
-
-const writeToken = (token: string) => {
-  try {
-    localStorage.setItem(TOKEN_KEY, token);
-  } catch {
-    /* storage unavailable */
-  }
-};
-
-const clearToken = () => {
-  try {
-    localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* storage unavailable */
-  }
-};
-
-const toAuthUser = (payload: MePayload): AuthUser => ({
-  id: payload.user.id,
-  email: payload.user.email,
-  name: payload.profile?.full_name ?? payload.user.email ?? "Student",
-});
-
-const toFailure = (
-  error: unknown,
-): { ok: false; error: string; fields: Record<string, string> } => {
-  if (error instanceof ApiError)
-    return { ok: false, error: error.message, fields: error.fields ?? {} };
-  if (error instanceof Error) return { ok: false, error: error.message, fields: {} };
-  return { ok: false, error: "Something went wrong. Please try again.", fields: {} };
-};
-
-/** Validate the stored token and load the current user (null if signed out). */
-const fetchMe = async (): Promise<AuthUser | null> => {
-  const token = readToken();
-  if (!token) return null;
-  try {
-    const payload = await apiRequest<MePayload>("/api/auth/me", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return toAuthUser(payload);
-  } catch {
-    // Missing, invalid or expired token: treat as signed out.
-    clearToken();
-    return null;
-  }
-};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [ready, setReady] = useState(false);
+  const queryClient = useQueryClient();
+  const previousUserId = useRef<string | null>(null);
 
-  // Restore the session from the stored token (client-only, after mount).
+  // Restore the session on first load.
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const me = await fetchMe();
-      if (!cancelled) {
-        setUser(me);
+    let active = true;
+    (async () => {
+      if (!getToken()) {
         setReady(true);
+        return;
+      }
+      try {
+        const me = await api.auth.me();
+        if (active) setUser(me);
+      } catch {
+        clearToken();
+        if (active) setUser(null);
+      } finally {
+        if (active) setReady(true);
       }
     })();
     return () => {
-      cancelled = true;
+      active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const value: Auth = {
-    user,
-    ready,
-    login: async (email, password) => {
-      try {
-        const session = await apiRequest<SessionPayload>("/api/auth/login", {
-          method: "POST",
-          body: JSON.stringify({ email, password }),
-        });
-        writeToken(session.access_token);
-        setUser(await fetchMe());
-        return { ok: true };
-      } catch (error) {
-        return toFailure(error);
-      }
-    },
-    signup: async (name, email, password) => {
-      try {
-        const result = await apiRequest<SignupPayload>("/api/auth/signup", {
-          method: "POST",
-          body: JSON.stringify({ email, password, full_name: name }),
-        });
-        // With email confirmation enabled Supabase returns no session,
-        // so the user must confirm before signing in.
-        if (!result.access_token) {
-          return { ok: true, requiresEmailConfirmation: true, message: result.message };
-        }
-        writeToken(result.access_token);
-        setUser(await fetchMe());
-        return { ok: true, requiresEmailConfirmation: false };
-      } catch (error) {
-        return toFailure(error);
-      }
-    },
-    logout: async () => {
-      const token = readToken();
-      // Clear the local session first, then revoke the token server-side.
-      clearToken();
-      setUser(null);
-      if (!token) return;
-      try {
-        await apiRequest<MessagePayload>("/api/auth/logout", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } catch {
-        // Local session is already cleared; revocation failing
-        // (e.g. an expired token) is not fatal.
-      }
-    },
+  // Drop all cached data whenever the account changes (login / logout / switch).
+  useEffect(() => {
+    if (previousUserId.current !== (user?.id ?? null)) {
+      queryClient.clear();
+      previousUserId.current = user?.id ?? null;
+    }
+  }, [user, queryClient]);
+
+  const login: Auth["login"] = async (email, password) => {
+    try {
+      const me = await api.auth.login(email, password);
+      setUser(me);
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : "Could not sign in.";
+    }
   };
 
+  const signup: Auth["signup"] = async (name, email, password) => {
+    try {
+      const result = await api.auth.signup(name, email, password);
+      if (!result.accessToken) {
+        // Email confirmation is enabled: no session until the link is clicked.
+        return { confirmationRequired: true, message: result.message };
+      }
+      setUser(result.user);
+      return {};
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Could not create your account." };
+    }
+  };
+
+  const logout: Auth["logout"] = async () => {
+    await api.auth.logout();
+    clearToken();
+    setUser(null);
+  };
+
+  const value: Auth = { user, ready, login, signup, logout };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -205,3 +111,6 @@ export function useAuth() {
   if (!a) throw new Error("useAuth must be used inside AuthProvider");
   return a;
 }
+
+// Re-export so callers that only need the token helpers stay simple.
+export { setToken };

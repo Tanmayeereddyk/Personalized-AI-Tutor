@@ -1,7 +1,7 @@
 export type CourseColor = "mint" | "sky" | "amber" | "rose" | "violet" | "lime";
 export type CourseIcon = "sigma" | "boxes" | "database" | "atom" | "code" | "book";
 
-export interface User { id: string; name: string; role: string }
+export interface User { id: string; name: string; role: string; email: string }
 
 export interface Topic {
   id: string;
@@ -16,14 +16,14 @@ export interface Course {
   id: string;
   name: string;
   code: string;
-  description?: string;
+  description?: string | undefined;
   color: CourseColor;
   icon: CourseIcon;
   mastery: number;
   topicCount: number;
   materialCount: number;
-  currentTopic?: string;
-  lastStudied?: string;
+  currentTopic?: string | undefined;
+  lastStudied?: string | undefined;
 }
 
 export type MaterialType = "pdf" | "ppt" | "video" | "doc";
@@ -49,7 +49,7 @@ export interface Assessment {
 }
 
 export type EventKind = "quiz" | "assessment" | "study" | "reminder";
-export interface CalendarEvent { id: string; date: string; title: string; kind?: EventKind; courseId?: string; startTime?: string | undefined; endTime?: string | undefined; description?: string | undefined }
+export interface CalendarEvent { id: string; date: string; title: string; kind?: EventKind | undefined; courseId?: string | undefined; startTime?: string | undefined; endTime?: string | undefined; description?: string | undefined }
 
 export interface Citation { kind: "pdf" | "slides" | "video"; label: string; ref: string }
 export interface ChatMessage { id: string; role: "user" | "assistant"; content: string; citations?: Citation[] }

@@ -1,9 +1,17 @@
 -- ============================================================
--- StudyAI — Supabase schema (Phase 1, Part 2)
+-- StudyAI — Supabase schema
 -- Run this in: Supabase Dashboard -> SQL Editor -> New query -> Run
 -- ============================================================
--- Creates: profiles, courses, indexes, updated_at trigger,
---          and Row Level Security (RLS) policies.
+-- This file is idempotent: it is safe to re-run on an existing
+-- database. It NEVER drops user accounts or user-created content.
+--
+-- Ownership model
+-- ---------------
+-- Every user-owned table has a `user_id` column that references
+-- auth.users(id). Row Level Security (RLS) restricts each row to its
+-- owner. The backend additionally filters every query by the id taken
+-- from the validated Bearer token, so a user can never read or change
+-- another user's data — even if they guess a record id.
 -- ============================================================
 
 -- ------------------------------------------------------------
@@ -24,16 +32,231 @@ create table if not exists public.courses (
     id          uuid primary key default gen_random_uuid(),
     user_id     uuid not null references auth.users (id) on delete cascade,
     name        text not null check (char_length(trim(name)) between 1 and 200),
+    code        text not null default 'COURSE',
     description text,
+    color       text not null default 'mint',
+    icon        text not null default 'book',
     created_at  timestamptz not null default now(),
     updated_at  timestamptz not null default now()
 );
 
--- Useful indexes: "list my courses" and "newest first" are the hot paths.
-create index if not exists courses_user_id_idx
-    on public.courses (user_id);
-create index if not exists courses_user_created_idx
-    on public.courses (user_id, created_at desc);
+-- Upgrade path for databases created before these columns existed.
+alter table public.courses add column if not exists code  text not null default 'COURSE';
+alter table public.courses add column if not exists color text not null default 'mint';
+alter table public.courses add column if not exists icon  text not null default 'book';
+
+-- ------------------------------------------------------------
+-- MATERIALS: uploaded documents / learning materials per course
+-- ------------------------------------------------------------
+create table if not exists public.materials (
+    id           uuid primary key default gen_random_uuid(),
+    user_id      uuid not null references auth.users (id) on delete cascade,
+    course_id    uuid not null references public.courses (id) on delete cascade,
+    name         text not null,
+    type         text not null default 'doc',
+    kind         text not null default 'Upload',
+    size_bytes   bigint,
+    mime_type    text,
+    storage_path text,
+    status       text not null default 'ready',
+    created_at   timestamptz not null default now(),
+    updated_at   timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- NOTES: summaries owned by the user
+-- ------------------------------------------------------------
+create table if not exists public.notes (
+    id         uuid primary key default gen_random_uuid(),
+    user_id    uuid not null references auth.users (id) on delete cascade,
+    course_id  uuid not null references public.courses (id) on delete cascade,
+    title      text not null,
+    content    text,
+    topics     text[] not null default '{}',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- TOPICS: knowledge map entries per course
+-- ------------------------------------------------------------
+create table if not exists public.topics (
+    id                uuid primary key default gen_random_uuid(),
+    user_id           uuid not null references auth.users (id) on delete cascade,
+    course_id         uuid not null references public.courses (id) on delete cascade,
+    name              text not null,
+    topic_group       text,
+    prerequisite      text,
+    resource_count    integer not null default 0,
+    created_at        timestamptz not null default now(),
+    updated_at        timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- MODULES / LESSONS: course structure
+-- ------------------------------------------------------------
+create table if not exists public.modules (
+    id         uuid primary key default gen_random_uuid(),
+    user_id    uuid not null references auth.users (id) on delete cascade,
+    course_id  uuid not null references public.courses (id) on delete cascade,
+    title      text not null,
+    position   integer not null default 0,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create table if not exists public.lessons (
+    id         uuid primary key default gen_random_uuid(),
+    user_id    uuid not null references auth.users (id) on delete cascade,
+    course_id  uuid not null references public.courses (id) on delete cascade,
+    module_id  uuid references public.modules (id) on delete cascade,
+    title      text not null,
+    position   integer not null default 0,
+    completed  boolean not null default false,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- LEARNING PROGRESS: per-user completion / mastery
+-- ------------------------------------------------------------
+create table if not exists public.learning_progress (
+    id         uuid primary key default gen_random_uuid(),
+    user_id    uuid not null references auth.users (id) on delete cascade,
+    course_id  uuid not null references public.courses (id) on delete cascade,
+    topic      text not null,
+    percent    integer not null default 0,
+    completed  boolean not null default false,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- QUIZZES: quiz attempts owned by the user
+-- ------------------------------------------------------------
+create table if not exists public.quizzes (
+    id         uuid primary key default gen_random_uuid(),
+    user_id    uuid not null references auth.users (id) on delete cascade,
+    course_id  uuid not null references public.courses (id) on delete cascade,
+    name       text not null,
+    topic      text,
+    difficulty text not null default 'Medium',
+    score      integer not null default 0,
+    total      integer not null default 0,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- FLASHCARD DECKS + CARDS
+-- ------------------------------------------------------------
+create table if not exists public.flashcard_decks (
+    id         uuid primary key default gen_random_uuid(),
+    user_id    uuid not null references auth.users (id) on delete cascade,
+    course_id  uuid not null references public.courses (id) on delete cascade,
+    topic      text not null default 'General',
+    card_count integer not null default 0,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create table if not exists public.flashcards (
+    id         uuid primary key default gen_random_uuid(),
+    user_id    uuid not null references auth.users (id) on delete cascade,
+    deck_id    uuid not null references public.flashcard_decks (id) on delete cascade,
+    front      text not null,
+    back       text not null,
+    created_at timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- ASSESSMENTS
+-- ------------------------------------------------------------
+create table if not exists public.assessments (
+    id               uuid primary key default gen_random_uuid(),
+    user_id          uuid not null references auth.users (id) on delete cascade,
+    course_id        uuid not null references public.courses (id) on delete cascade,
+    name             text not null,
+    topics           text[] not null default '{}',
+    score            integer not null default 0,
+    total            integer not null default 0,
+    duration_minutes integer not null default 0,
+    created_at       timestamptz not null default now(),
+    updated_at       timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- CALENDAR EVENTS: personal study schedule
+-- ------------------------------------------------------------
+create table if not exists public.calendar_events (
+    id          uuid primary key default gen_random_uuid(),
+    user_id     uuid not null references auth.users (id) on delete cascade,
+    course_id   uuid references public.courses (id) on delete set null,
+    title       text not null,
+    event_date  date not null,
+    start_time  text,
+    end_time    text,
+    description text,
+    kind        text,
+    created_at  timestamptz not null default now(),
+    updated_at  timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- TUTOR CONVERSATIONS + MESSAGES
+-- ------------------------------------------------------------
+create table if not exists public.tutor_conversations (
+    id         uuid primary key default gen_random_uuid(),
+    user_id    uuid not null references auth.users (id) on delete cascade,
+    course_id  uuid references public.courses (id) on delete cascade,
+    title      text not null default 'Tutor conversation',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create table if not exists public.tutor_messages (
+    id              uuid primary key default gen_random_uuid(),
+    user_id         uuid not null references auth.users (id) on delete cascade,
+    conversation_id uuid not null references public.tutor_conversations (id) on delete cascade,
+    role            text not null check (role in ('user', 'assistant')),
+    content         text not null,
+    citations       jsonb not null default '[]'::jsonb,
+    created_at      timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- BOOKMARKS: personal saved resources
+-- ------------------------------------------------------------
+create table if not exists public.bookmarks (
+    id         uuid primary key default gen_random_uuid(),
+    user_id    uuid not null references auth.users (id) on delete cascade,
+    course_id  uuid references public.courses (id) on delete set null,
+    title      text not null,
+    url        text,
+    note       text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- Indexes: "list my rows" is the hot path for every table.
+-- ------------------------------------------------------------
+create index if not exists courses_user_id_idx          on public.courses (user_id);
+create index if not exists courses_user_created_idx     on public.courses (user_id, created_at desc);
+create index if not exists materials_user_idx           on public.materials (user_id, course_id);
+create index if not exists notes_user_idx               on public.notes (user_id, course_id);
+create index if not exists topics_user_idx              on public.topics (user_id, course_id);
+create index if not exists modules_user_idx             on public.modules (user_id, course_id);
+create index if not exists lessons_user_idx             on public.lessons (user_id, course_id);
+create index if not exists progress_user_idx            on public.learning_progress (user_id, course_id);
+create index if not exists quizzes_user_idx             on public.quizzes (user_id, course_id);
+create index if not exists decks_user_idx               on public.flashcard_decks (user_id, course_id);
+create index if not exists flashcards_user_idx          on public.flashcards (user_id, deck_id);
+create index if not exists assessments_user_idx         on public.assessments (user_id, course_id);
+create index if not exists calendar_user_idx            on public.calendar_events (user_id, event_date);
+create index if not exists conversations_user_idx       on public.tutor_conversations (user_id, course_id);
+create index if not exists messages_user_idx            on public.tutor_messages (user_id, conversation_id);
+create index if not exists bookmarks_user_idx           on public.bookmarks (user_id, course_id);
 
 -- ------------------------------------------------------------
 -- updated_at: keep timestamps fresh automatically
@@ -48,15 +271,24 @@ begin
 end;
 $$;
 
-drop trigger if exists profiles_set_updated_at on public.profiles;
-create trigger profiles_set_updated_at
-    before update on public.profiles
-    for each row execute function public.set_updated_at();
-
-drop trigger if exists courses_set_updated_at on public.courses;
-create trigger courses_set_updated_at
-    before update on public.courses
-    for each row execute function public.set_updated_at();
+do $$
+declare
+    t text;
+    tables text[] := array[
+        'profiles', 'courses', 'materials', 'notes', 'topics', 'modules',
+        'lessons', 'learning_progress', 'quizzes', 'flashcard_decks',
+        'assessments', 'calendar_events', 'tutor_conversations', 'bookmarks'
+    ];
+begin
+    foreach t in array tables loop
+        execute format('drop trigger if exists %I_set_updated_at on public.%I;', t, t);
+        execute format(
+            'create trigger %I_set_updated_at before update on public.%I '
+            'for each row execute function public.set_updated_at();', t, t
+        );
+    end loop;
+end;
+$$;
 
 -- ------------------------------------------------------------
 -- ROW LEVEL SECURITY (RLS)
@@ -64,9 +296,21 @@ create trigger courses_set_updated_at
 -- The backend's service-role key bypasses RLS (server-side only) and
 -- additionally filters every query by the authenticated user id.
 -- ------------------------------------------------------------
-
-alter table public.profiles enable row level security;
-alter table public.courses  enable row level security;
+do $$
+declare
+    t text;
+    tables text[] := array[
+        'profiles', 'courses', 'materials', 'notes', 'topics', 'modules',
+        'lessons', 'learning_progress', 'quizzes', 'flashcard_decks',
+        'flashcards', 'assessments', 'calendar_events',
+        'tutor_conversations', 'tutor_messages', 'bookmarks'
+    ];
+begin
+    foreach t in array tables loop
+        execute format('alter table public.%I enable row level security;', t);
+    end loop;
+end;
+$$;
 
 -- PROFILES: a user may only read and update their own profile.
 -- (Profile rows are inserted by the backend using the service-role key
@@ -82,24 +326,74 @@ create policy "profiles_update_own"
     using (auth.uid() = id)
     with check (auth.uid() = id);
 
--- COURSES: a user may only insert, read, update, and delete their own courses.
-drop policy if exists "courses_insert_own" on public.courses;
-create policy "courses_insert_own"
-    on public.courses for insert
-    with check (auth.uid() = user_id);
+-- Every user-owned table gets the same four "own rows only" policies.
+do $$
+declare
+    t text;
+    tables text[] := array[
+        'courses', 'materials', 'notes', 'topics', 'modules', 'lessons',
+        'learning_progress', 'quizzes', 'flashcard_decks', 'flashcards',
+        'assessments', 'calendar_events', 'tutor_conversations',
+        'tutor_messages', 'bookmarks'
+    ];
+begin
+    foreach t in array tables loop
+        execute format('drop policy if exists %I on public.%I;', t || '_insert_own', t);
+        execute format(
+            'create policy %I on public.%I for insert with check (auth.uid() = user_id);',
+            t || '_insert_own', t
+        );
 
-drop policy if exists "courses_select_own" on public.courses;
-create policy "courses_select_own"
-    on public.courses for select
-    using (auth.uid() = user_id);
+        execute format('drop policy if exists %I on public.%I;', t || '_select_own', t);
+        execute format(
+            'create policy %I on public.%I for select using (auth.uid() = user_id);',
+            t || '_select_own', t
+        );
 
-drop policy if exists "courses_update_own" on public.courses;
-create policy "courses_update_own"
-    on public.courses for update
-    using (auth.uid() = user_id)
-    with check (auth.uid() = user_id);
+        execute format('drop policy if exists %I on public.%I;', t || '_update_own', t);
+        execute format(
+            'create policy %I on public.%I for update using (auth.uid() = user_id) '
+            'with check (auth.uid() = user_id);', t || '_update_own', t
+        );
 
-drop policy if exists "courses_delete_own" on public.courses;
-create policy "courses_delete_own"
-    on public.courses for delete
-    using (auth.uid() = user_id);
+        execute format('drop policy if exists %I on public.%I;', t || '_delete_own', t);
+        execute format(
+            'create policy %I on public.%I for delete using (auth.uid() = user_id);',
+            t || '_delete_own', t
+        );
+    end loop;
+end;
+$$;
+
+-- ------------------------------------------------------------
+-- STORAGE: private bucket for uploaded course materials.
+-- Objects are stored as <user_id>/<course_id>/<material_id>/<filename>
+-- so a user can only reach their own folder.
+-- ------------------------------------------------------------
+insert into storage.buckets (id, name, public)
+values ('materials', 'materials', false)
+on conflict (id) do nothing;
+
+drop policy if exists "materials_objects_select_own" on storage.objects;
+create policy "materials_objects_select_own"
+    on storage.objects for select
+    using (
+        bucket_id = 'materials'
+        and (storage.foldername(name))[1] = auth.uid()::text
+    );
+
+drop policy if exists "materials_objects_insert_own" on storage.objects;
+create policy "materials_objects_insert_own"
+    on storage.objects for insert
+    with check (
+        bucket_id = 'materials'
+        and (storage.foldername(name))[1] = auth.uid()::text
+    );
+
+drop policy if exists "materials_objects_delete_own" on storage.objects;
+create policy "materials_objects_delete_own"
+    on storage.objects for delete
+    using (
+        bucket_id = 'materials'
+        and (storage.foldername(name))[1] = auth.uid()::text
+    );

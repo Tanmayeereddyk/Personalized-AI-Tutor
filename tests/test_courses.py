@@ -67,12 +67,18 @@ def test_create_course_returns_course_shape(client, logged_in_user) -> None:
         "id",
         "user_id",
         "name",
+        "code",
         "description",
+        "color",
+        "icon",
         "created_at",
         "updated_at",
     }
     assert data["name"] == "Algebra 101"
     assert data["user_id"] == user.id  # owner comes from the token, not the body
+    assert data["code"] == "A1"  # derived from the name when not supplied
+    assert data["color"] == "mint"  # palette defaults are always valid
+    assert data["icon"] == "book"
 
 
 def test_list_courses_returns_only_my_courses(client, fake_supabase, logged_in_user) -> None:

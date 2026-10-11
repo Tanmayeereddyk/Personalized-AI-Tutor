@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Label } from "@/components/ui/kit";
 import { AuthCard, FieldError, GoogleButton } from "@/components/auth/AuthCard";
@@ -24,8 +25,8 @@ function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [errors, setErrors] = useState<Partial<Record<FormField, string>>>({});
-  const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Partial<Record<"email" | "password" | "form", string>>>({});
+  const [busy, setBusy] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,20 +35,11 @@ function LoginPage() {
     else if (!/^\S+@\S+\.\S+$/.test(email)) errs.email = "Enter a valid email address.";
     if (!password) errs.password = "Password is required.";
     if (Object.keys(errs).length) return setErrors(errs);
-
-    setSubmitting(true);
-    const result = await login(email.trim(), password);
-    setSubmitting(false);
-
-    if (!result.ok) {
-      const fieldErrs: Partial<Record<FormField, string>> = {};
-      const emailError = result.fields["email"];
-      const passwordError = result.fields["password"];
-      if (emailError) fieldErrs.email = emailError;
-      if (passwordError) fieldErrs.password = passwordError;
-      if (!emailError && !passwordError) fieldErrs.form = result.error;
-      return setErrors(fieldErrs);
-    }
+    setBusy(true);
+    setErrors({});
+    const err = await login(email.trim(), password);
+    setBusy(false);
+    if (err) return setErrors({ form: err });
     navigate({ to: "/" });
   };
 
@@ -85,13 +77,7 @@ function LoginPage() {
         <div>
           <div className="flex items-center justify-between">
             <Label>Password</Label>
-            <button
-              type="button"
-              onClick={() => toast("Password reset isn't available in this preview yet.")}
-              className="mb-2 text-xs text-muted-foreground hover:text-foreground"
-            >
-              Forgot password?
-            </button>
+            <button type="button" onClick={() => toast("Password reset isn't available yet.")} className="mb-2 text-xs text-muted-foreground hover:text-foreground">Forgot password?</button>
           </div>
           <input
             type="password"
@@ -103,8 +89,8 @@ function LoginPage() {
           />
           <FieldError msg={errors.password} />
         </div>
-        <button type="submit" className="btn btn-primary w-full" disabled={submitting}>
-          {submitting ? "Signing in…" : "Log in"}
+        <button type="submit" className="btn btn-primary w-full" disabled={busy}>
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />}Log in
         </button>
       </form>
       <GoogleButton onClick={() => toast("Google sign-in isn't available yet.")} />

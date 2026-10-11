@@ -1,26 +1,46 @@
-import { useEffect, useState } from "react";
-import { calendarEvents as seed } from "./mockData";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { api } from "./api";
+import { useAuth } from "./auth";
 import type { CalendarEvent } from "./types";
 
-/** Calendar events persisted in localStorage. Swap for API calls later. */
-const KEY = "studyai.events";
-
+/**
+ * Calendar events are personal data stored in Supabase. This hook loads
+ * them for the signed-in user and refreshes after every mutation, so the
+ * calendar always reflects what is actually saved on the server.
+ */
 export function useEvents() {
-  const [events, setEvents] = useState<CalendarEvent[]>(seed);
-  const [loaded, setLoaded] = useState(false);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["events", user?.id],
+    queryFn: () => api.events.list(),
+    enabled: !!user,
+  });
 
-  useEffect(() => {
-    try { const s = localStorage.getItem(KEY); if (s) setEvents(JSON.parse(s)); } catch { /* ignore */ }
-    setLoaded(true);
-  }, []);
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["events", user?.id] });
 
-  useEffect(() => { if (loaded) localStorage.setItem(KEY, JSON.stringify(events)); }, [events, loaded]);
+  const create = useMutation({
+    mutationFn: (event: Omit<CalendarEvent, "id">) => api.events.create(event),
+    onSuccess: invalidate,
+  });
+  const edit = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<CalendarEvent> }) =>
+      api.events.update(id, patch),
+    onSuccess: invalidate,
+  });
+  const destroy = useMutation({
+    mutationFn: (id: string) => api.events.remove(id),
+    onSuccess: invalidate,
+  });
 
   return {
-    events,
-    add: (e: Omit<CalendarEvent, "id">) => setEvents((p) => [...p, { ...e, id: crypto.randomUUID() }]),
-    update: (id: string, patch: Partial<CalendarEvent>) => setEvents((p) => p.map((e) => (e.id === id ? { ...e, ...patch } : e))),
-    remove: (id: string) => setEvents((p) => p.filter((e) => e.id !== id)),
+    events: query.data ?? [],
+    loading: query.isLoading,
+    error: query.isError ? (query.error as Error).message : null,
+    add: (event: Omit<CalendarEvent, "id">) => create.mutateAsync(event),
+    update: (id: string, patch: Partial<CalendarEvent>) => edit.mutateAsync({ id, patch }),
+    remove: (id: string) => destroy.mutateAsync(id),
   };
 }
 

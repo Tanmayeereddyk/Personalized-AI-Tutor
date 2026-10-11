@@ -1,6 +1,8 @@
-import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, Sparkles } from "lucide-react";
-import { useCourse } from "@/lib/store";
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useState } from "react";
+import { ArrowLeft, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useCourse, useStore } from "@/lib/store";
 import { CourseBadge } from "@/components/ui/kit";
 import { cn } from "@/lib/utils";
 
@@ -29,18 +31,43 @@ const tabs = [
 function CourseLayout() {
   const { courseId } = Route.useParams();
   const course = useCourse(courseId);
+  const { coursesLoading, removeCourse, reloadCourses } = useStore();
+  const navigate = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const isTutor = path.endsWith("/tutor");
+  const [deleting, setDeleting] = useState(false);
 
   if (!course) {
+    if (coursesLoading) {
+      return (
+        <div className="flex items-center justify-center gap-2 py-20 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />Loading course…
+        </div>
+      );
+    }
     return (
       <div className="card py-20 text-center">
         <h1 className="text-xl font-semibold">Course not found</h1>
-        <p className="mt-1 text-sm text-muted-foreground">It may have been removed.</p>
+        <p className="mt-1 text-sm text-muted-foreground">It may have been removed, or it belongs to another account.</p>
         <Link to="/courses" className="btn btn-ghost mt-6">Back to courses</Link>
       </div>
     );
   }
+
+  const removeThisCourse = async () => {
+    if (!window.confirm(`Delete “${course.name}”? This removes its materials, notes and practice data. This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await removeCourse(course.id);
+      toast.success("Course deleted.");
+      navigate({ to: "/courses" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete the course.");
+      reloadCourses();
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div>
@@ -56,12 +83,18 @@ function CourseLayout() {
               <span className="text-sm text-muted-foreground">{course.mastery}% overall mastery</span>
             </div>
             <h1 className="mt-1.5 text-2xl font-semibold tracking-tight sm:text-3xl">{course.name}</h1>
+            {course.description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{course.description}</p>}
           </div>
         </div>
         {!isTutor && (
-          <Link to="/courses/$courseId/tutor" params={{ courseId }} className="btn btn-primary px-5 py-2.5">
-            <Sparkles className="h-4 w-4" />Ask Tutor
-          </Link>
+          <div className="flex items-center gap-2">
+            <button className="btn btn-ghost text-destructive" onClick={removeThisCourse} disabled={deleting}>
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Delete
+            </button>
+            <Link to="/courses/$courseId/tutor" params={{ courseId }} className="btn btn-primary px-5 py-2.5">
+              <Sparkles className="h-4 w-4" />Ask Tutor
+            </Link>
+          </div>
         )}
       </div>
 

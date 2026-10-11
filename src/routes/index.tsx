@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
-  const { user, courses, setAddCourseOpen } = useStore();
+  const { user, courses, coursesLoading, coursesError, reloadCourses, setAddCourseOpen } = useStore();
   const { events } = useEvents();
   const upcoming = events.filter((e) => e.date >= todayKey()).sort(sortEvents).slice(0, 4);
   const resume = courses.find((c) => c.currentTopic) ?? courses[0];
@@ -68,7 +68,15 @@ function Dashboard() {
           <h2 className="text-lg font-semibold">My Courses</h2>
           <Link to="/courses" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">View all <ArrowRight className="h-3.5 w-3.5" /></Link>
         </div>
-        {courses.length === 0 ? (
+        {coursesLoading ? (
+          <div className="card px-6 py-16 text-center text-sm text-muted-foreground">Loading your courses…</div>
+        ) : coursesError ? (
+          <div className="card px-6 py-16 text-center">
+            <p className="font-medium">Couldn't load your courses</p>
+            <p className="mt-1 text-sm text-muted-foreground">{coursesError}</p>
+            <button className="btn btn-primary mt-5" onClick={reloadCourses}>Try again</button>
+          </div>
+        ) : courses.length === 0 ? (
           <EmptyState icon={Library} title="No courses yet." body="Add your first course and start building your personalized study space."
             action={<button className="btn btn-primary" onClick={() => setAddCourseOpen(true)}>+ Add Course</button>} />
         ) : (

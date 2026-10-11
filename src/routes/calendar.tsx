@@ -32,7 +32,7 @@ const longDate = (k: string) => new Date(k + "T00:00:00").toLocaleDateString("en
 type Draft = { title: string; date: string; startTime: string; endTime: string; description: string };
 
 function CalendarPage() {
-  const { events, add, update, remove } = useEvents();
+  const { events, loading, error, add, update, remove } = useEvents();
   const [cursor, setCursor] = useState(() => new Date(2026, 9, 1));
   const [today, setToday] = useState("");
   const [form, setForm] = useState<{ mode: "add" | "edit"; draft: Draft; id?: string } | null>(null);
@@ -59,11 +59,15 @@ function CalendarPage() {
     setForm({ mode: "edit", id: e.id, draft: { title: e.title, date: e.date, startTime: e.startTime ?? "", endTime: e.endTime ?? "", description: e.description ?? "" } });
   };
 
-  const save = (d: Draft) => {
+  const save = async (d: Draft) => {
     const data = { title: d.title.trim(), date: d.date, startTime: d.startTime || undefined, endTime: d.endTime || undefined, description: d.description.trim() || undefined };
-    if (form?.mode === "edit" && form.id) { update(form.id, data); toast.success("Event updated successfully."); }
-    else { add(data); toast.success("Event added successfully."); }
-    setForm(null);
+    try {
+      if (form?.mode === "edit" && form.id) { await update(form.id, data); toast.success("Event updated successfully."); }
+      else { await add(data); toast.success("Event added successfully."); }
+      setForm(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save the event.");
+    }
   };
 
   return (
@@ -75,6 +79,11 @@ function CalendarPage() {
         </div>
         <button className="btn btn-primary" onClick={() => openAdd()}><Plus className="h-4 w-4" />Add Event</button>
       </div>
+      {error && (
+        <div className="mb-5 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Couldn't load your events: {error}
+        </div>
+      )}
       <div className="grid gap-5 lg:grid-cols-[1fr_300px]">
         <div className="card p-3 sm:p-5">
           <div className="mb-4 flex items-center justify-between gap-2">
@@ -112,7 +121,9 @@ function CalendarPage() {
         </div>
         <div className="card self-start p-5">
           <h2 className="mb-4 font-medium">Upcoming Events</h2>
-          {upcoming.length === 0 ? (
+          {loading ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">Loading events…</div>
+          ) : upcoming.length === 0 ? (
             <div className="py-6 text-center">
               <CalendarDays className="mx-auto h-6 w-6 text-muted-foreground" />
               <div className="mt-2 text-sm font-medium">No upcoming events</div>
@@ -170,7 +181,7 @@ function CalendarPage() {
             <div className="mt-6 flex justify-end gap-2">
               <AlertDialog.Cancel className="btn btn-ghost">Cancel</AlertDialog.Cancel>
               <AlertDialog.Action className="btn bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={() => { if (confirmDelete) { remove(confirmDelete.id); toast.success("Event deleted."); } setConfirmDelete(null); setViewing(null); }}>
+                onClick={() => { if (confirmDelete) { const id = confirmDelete.id; void remove(id).then(() => toast.success("Event deleted.")).catch((err: unknown) => toast.error(err instanceof Error ? err.message : "Could not delete the event.")); } setConfirmDelete(null); setViewing(null); }}>
                 Delete
               </AlertDialog.Action>
             </div>

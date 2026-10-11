@@ -8,7 +8,13 @@ can only ever see, change, or delete their own courses.
 from fastapi import HTTPException
 from supabase import Client, PostgrestAPIError
 
-from app.schemas.course import CourseCreate, CourseResponse, CourseUpdate
+from app.schemas.course import (
+    COURSE_COLORS,
+    COURSE_ICONS,
+    CourseCreate,
+    CourseResponse,
+    CourseUpdate,
+)
 
 
 def _db_error(exc: PostgrestAPIError) -> HTTPException:
@@ -17,6 +23,21 @@ def _db_error(exc: PostgrestAPIError) -> HTTPException:
         status_code=500,
         detail="Database error. Run database/schema.sql in Supabase first.",
     )
+
+
+def _clean_code(code: str | None, name: str) -> str:
+    """Normalise the short course code shown on cards."""
+    cleaned = (code or "").strip().upper()
+    if not cleaned:
+        # Fall back to the first letters of the name, or a generic label.
+        initials = "".join(w[0] for w in name.split() if w)[:6]
+        cleaned = initials or "COURSE"
+    return cleaned[:32]
+
+
+def _clean_choice(value: str | None, allowed: tuple[str, ...], default: str) -> str:
+    """Keep palette / icon values inside the known set."""
+    return value if value in allowed else default
 
 
 def create_course(client: Client, user_id: str, payload: CourseCreate) -> CourseResponse:
@@ -28,7 +49,10 @@ def create_course(client: Client, user_id: str, payload: CourseCreate) -> Course
                 {
                     "user_id": user_id,
                     "name": payload.name,
+                    "code": _clean_code(payload.code, payload.name),
                     "description": payload.description,
+                    "color": _clean_choice(payload.color, COURSE_COLORS, "mint"),
+                    "icon": _clean_choice(payload.icon, COURSE_ICONS, "book"),
                 }
             )
             .execute()
@@ -87,6 +111,14 @@ def update_course(
     changes = payload.model_dump(exclude_unset=True)
     if not changes:
         raise HTTPException(status_code=400, detail="No fields to update")
+
+    # Keep UI metadata inside known values (same rules as create).
+    if "code" in changes and changes["code"] is not None:
+        changes["code"] = _clean_code(changes["code"], changes.get("name") or "Course")
+    if "color" in changes and changes["color"] is not None:
+        changes["color"] = _clean_choice(changes["color"], COURSE_COLORS, "mint")
+    if "icon" in changes and changes["icon"] is not None:
+        changes["icon"] = _clean_choice(changes["icon"], COURSE_ICONS, "book")
 
     try:
         result = (

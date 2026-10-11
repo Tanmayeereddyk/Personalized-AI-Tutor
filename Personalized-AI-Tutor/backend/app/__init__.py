@@ -1,1 +1,0 @@
-"""StudyAI backend application package."""

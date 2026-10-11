@@ -11,7 +11,7 @@ Business logic lives in services/, not here.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, courses, health
+from app.api.routes import auth, courses, health, learning, materials
 from app.core.config import settings
 
 # Create the application. Interactive docs are served at /docs.
@@ -34,6 +34,13 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(courses.router)
+app.include_router(materials.router)
+app.include_router(learning.notes_router)
+app.include_router(learning.quizzes_router)
+app.include_router(learning.decks_router)
+app.include_router(learning.assessments_router)
+app.include_router(learning.events_router)
+app.include_router(learning.bookmarks_router)
 
 
 @app.get("/", tags=["root"])

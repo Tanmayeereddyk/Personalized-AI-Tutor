@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
-import { FileText, Presentation, Video, File, Plus, UploadCloud, CheckCircle2, Loader2, AlertCircle, FolderOpen } from "lucide-react";
-import { useStore } from "@/lib/store";
+import { FileText, Presentation, Video, File, Plus, UploadCloud, CheckCircle2, Loader2, AlertCircle, FolderOpen, Trash2, ExternalLink } from "lucide-react";
+import { toast } from "sonner";
+import { api } from "@/lib/api";
+import { useDeleteMaterial, useMaterials, useUploadMaterials } from "@/lib/queries";
 import type { Material, MaterialType } from "@/lib/types";
 import { EmptyState, Modal, PageHeader } from "@/components/ui/kit";
 import { cn } from "@/lib/utils";
@@ -19,33 +21,47 @@ export function StatusChip({ status }: { status: Material["status"] }) {
   return <span className="chip text-warning"><AlertCircle className="h-3 w-3" />Needs attention</span>;
 }
 
-function detectType(name: string): MaterialType {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (ext === "pdf") return "pdf";
-  if (["ppt", "pptx"].includes(ext)) return "ppt";
-  if (["mp4", "mov", "webm"].includes(ext)) return "video";
-  return "doc";
-}
-
 function Materials() {
   const { courseId } = Route.useParams();
-  const { materials, addMaterials, updateMaterial } = useStore();
-  const list = materials.filter((m) => m.courseId === courseId);
+  const materials = useMaterials(courseId);
+  const upload = useUploadMaterials(courseId);
+  const remove = useDeleteMaterial(courseId);
+  const list = materials.data ?? [];
   const [open, setOpen] = useState(false);
   const [drag, setDrag] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
   const input = useRef<HTMLInputElement>(null);
 
-  const handleFiles = (files: FileList | null) => {
+  const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return;
-    const items: Material[] = Array.from(files).map((f, i) => ({
-      id: `up-${Date.now()}-${i}`, courseId, name: f.name, type: detectType(f.name),
-      kind: "Upload", meta: `${(f.size / 1024 / 1024).toFixed(1)} MB`, added: "Just now", status: "processing",
-    }));
-    addMaterials(items);
-    setRecent((r) => [...items.map((m) => m.id), ...r]);
-    // Mock processing — replace with backend job status polling.
-    items.forEach((m, i) => setTimeout(() => updateMaterial(m.id, { status: "ready" }), 2200 + i * 900));
+    try {
+      const saved = await upload.mutateAsync(Array.from(files));
+      setRecent((r) => [...saved.map((m) => m.id), ...r]);
+      toast.success(`${saved.length} file${saved.length === 1 ? "" : "s"} uploaded.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Upload failed.");
+    } finally {
+      if (input.current) input.current.value = "";
+    }
+  };
+
+  const openMaterial = async (id: string) => {
+    try {
+      const url = await api.materials.url(id);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not open the file.");
+    }
+  };
+
+  const removeMaterial = async (id: string) => {
+    try {
+      await remove.mutateAsync(id);
+      setRecent((r) => r.filter((x) => x !== id));
+      toast.success("Material removed.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not remove the material.");
+    }
   };
 
   return (
@@ -53,8 +69,16 @@ function Materials() {
       <PageHeader title="Course Materials" subtitle="Slides, textbooks, notes and lecture recordings."
         action={<button className="btn btn-primary" onClick={() => setOpen(true)}><Plus className="h-4 w-4" />Add Files</button>} />
 
-      {list.length === 0 ? (
-        <EmptyState icon={FolderOpen} title="No materials yet" body="Upload slides, PDFs or lecture videos to start generating notes and quizzes."
+      {materials.isLoading ? (
+        <div className="card px-6 py-16 text-center text-sm text-muted-foreground">Loading materials…</div>
+      ) : materials.isError ? (
+        <div className="card px-6 py-16 text-center">
+          <p className="font-medium">Couldn't load materials</p>
+          <p className="mt-1 text-sm text-muted-foreground">{(materials.error as Error).message}</p>
+          <button className="btn btn-primary mt-5" onClick={() => materials.refetch()}>Try again</button>
+        </div>
+      ) : list.length === 0 ? (
+        <EmptyState icon={FolderOpen} title="No materials yet" body="Upload slides, PDFs or lecture videos to keep everything for this course in one place."
           action={<button className="btn btn-primary" onClick={() => setOpen(true)}>Add Materials</button>} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -69,34 +93,41 @@ function Materials() {
                 <div className="mt-4 truncate font-medium" title={m.name}>{m.name}</div>
                 <div className="mt-1 text-sm text-muted-foreground">{m.kind} · {m.meta}</div>
                 <div className="mt-1 text-xs text-muted-foreground">{m.added}</div>
-                <button className="btn btn-ghost mt-5 self-start" disabled={m.status === "processing"}>Open</button>
+                <div className="mt-5 flex items-center gap-1">
+                  <button className="btn btn-ghost self-start" disabled={m.status === "processing"} onClick={() => openMaterial(m.id)}>
+                    <ExternalLink className="h-4 w-4" />Open
+                  </button>
+                  <button className="btn btn-ghost self-start text-destructive" onClick={() => removeMaterial(m.id)} disabled={remove.isPending}>
+                    <Trash2 className="h-4 w-4" />Remove
+                  </button>
+                </div>
               </div>
             );
           })}
         </div>
       )}
 
-      <Modal open={open} onOpenChange={setOpen} title="Add course materials" description="Files are processed so your tutor, notes and quizzes can cite them." wide>
+      <Modal open={open} onOpenChange={setOpen} title="Add course materials" description="Files are stored privately in your own account." wide>
         <div
           onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
           onDragLeave={() => setDrag(false)}
-          onDrop={(e) => { e.preventDefault(); setDrag(false); handleFiles(e.dataTransfer.files); }}
+          onDrop={(e) => { e.preventDefault(); setDrag(false); void handleFiles(e.dataTransfer.files); }}
           className={cn("flex flex-col items-center rounded-2xl border-2 border-dashed px-6 py-12 text-center transition",
             drag ? "border-primary bg-primary/5" : "border-foreground/15")}
         >
           <span className={cn("flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary text-primary transition", drag && "scale-110")}>
-            <UploadCloud className="h-7 w-7" />
+            {upload.isPending ? <Loader2 className="h-7 w-7 animate-spin" /> : <UploadCloud className="h-7 w-7" />}
           </span>
-          <p className="mt-4 font-medium">Drag & drop your course materials here</p>
+          <p className="mt-4 font-medium">{upload.isPending ? "Uploading…" : "Drag & drop your course materials here"}</p>
           <p className="my-3 text-xs text-muted-foreground">or</p>
-          <button className="btn btn-primary" onClick={() => input.current?.click()}>Browse Files</button>
-          <input ref={input} type="file" multiple className="hidden" accept=".pdf,.ppt,.pptx,.doc,.docx,.mp4" onChange={(e) => handleFiles(e.target.files)} />
+          <button className="btn btn-primary" onClick={() => input.current?.click()} disabled={upload.isPending}>Browse Files</button>
+          <input ref={input} type="file" multiple className="hidden" accept=".pdf,.ppt,.pptx,.doc,.docx,.mp4" onChange={(e) => void handleFiles(e.target.files)} />
           <p className="mt-4 font-mono text-xs text-muted-foreground">PDF · PPTX · DOCX · MP4</p>
         </div>
         {recent.length > 0 && (
           <div className="mt-5 space-y-2">
             {recent.map((id) => {
-              const m = materials.find((x) => x.id === id);
+              const m = list.find((x) => x.id === id);
               if (!m) return null;
               const Icon = typeIcon[m.type];
               return (

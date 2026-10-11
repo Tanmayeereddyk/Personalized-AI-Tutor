@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { useStore } from "@/lib/store";
 import type { CourseColor, CourseIcon } from "@/lib/types";
 import { Modal, Label, courseIcons, courseColorBg, courseColorText } from "@/components/ui/kit";
@@ -9,28 +11,48 @@ const colors: CourseColor[] = ["mint", "sky", "amber", "rose", "violet", "lime"]
 const icons = Object.keys(courseIcons) as CourseIcon[];
 
 export function AddCourseModal() {
-  const { addCourseOpen, setAddCourseOpen, addCourse } = useStore();
+  const { addCourseOpen, setAddCourseOpen, createCourse } = useStore();
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState<CourseColor>("mint");
   const [icon, setIcon] = useState<CourseIcon>("book");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const reset = () => { setName(""); setCode(""); setDescription(""); setColor("mint"); setIcon("book"); };
+  const reset = () => { setName(""); setCode(""); setDescription(""); setColor("mint"); setIcon("book"); setError(null); };
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !code.trim()) return;
-    const c = addCourse({ name: name.trim(), code: code.trim().toUpperCase(), description, color, icon });
-    setAddCourseOpen(false);
-    reset();
-    navigate({ to: "/courses/$courseId", params: { courseId: c.id } });
+    if (!name.trim() || !code.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const c = await createCourse({
+        name: name.trim(),
+        code: code.trim().toUpperCase(),
+        description: description.trim() || undefined,
+        color,
+        icon,
+      });
+      setAddCourseOpen(false);
+      reset();
+      toast.success("Course created.");
+      navigate({ to: "/courses/$courseId", params: { courseId: c.id } });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not create the course.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <Modal open={addCourseOpen} onOpenChange={setAddCourseOpen} title="Add a new course" description="Set up a space for your materials, notes and practice.">
+    <Modal open={addCourseOpen} onOpenChange={(o) => { setAddCourseOpen(o); if (!o) reset(); }} title="Add a new course" description="Set up a space for your materials, notes and practice.">
       <form onSubmit={submit} className="space-y-5">
+        {error && <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
         <div>
           <Label>Course name</Label>
           <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Design & Analysis of Algorithms" autoFocus />
@@ -70,7 +92,9 @@ export function AddCourseModal() {
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn btn-ghost" onClick={() => setAddCourseOpen(false)}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={!name.trim() || !code.trim()}>Create Course</button>
+          <button type="submit" className="btn btn-primary" disabled={!name.trim() || !code.trim() || saving}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}Create Course
+          </button>
         </div>
       </form>
     </Modal>

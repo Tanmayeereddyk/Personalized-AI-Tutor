@@ -169,12 +169,42 @@ class FakeQuery:
         return SimpleNamespace(data=data)
 
 
+class FakeStorageBucket:
+    """Mimics the small part of Supabase Storage the backend uses."""
+
+    def __init__(self, client: "FakeSupabase", name: str) -> None:
+        self._client = client
+        self._name = name
+
+    def upload(self, path: str, content: bytes, options: dict | None = None) -> SimpleNamespace:
+        self._client.stored_objects[f"{self._name}/{path}"] = content
+        return SimpleNamespace(path=path)
+
+    def remove(self, paths: list[str]) -> list[SimpleNamespace]:
+        for path in paths:
+            self._client.stored_objects.pop(f"{self._name}/{path}", None)
+        return [SimpleNamespace(name=path) for path in paths]
+
+    def create_signed_url(self, path: str, expires_in: int) -> dict:
+        return {"signedURL": f"https://files.example.com/{self._name}/{path}?token=test"}
+
+
+class FakeStorage:
+    def __init__(self, client: "FakeSupabase") -> None:
+        self._client = client
+
+    def from_(self, bucket: str) -> FakeStorageBucket:
+        return FakeStorageBucket(self._client, bucket)
+
+
 class FakeSupabase:
     """One fake client standing in for both anon and service-role clients."""
 
     def __init__(self) -> None:
         self.auth = FakeAuth()
         self.tables: dict[str, list[dict]] = {}
+        self.stored_objects: dict[str, bytes] = {}
+        self.storage = FakeStorage(self)
 
     def table(self, name: str) -> FakeQuery:
         return FakeQuery(self.tables.setdefault(name, []))

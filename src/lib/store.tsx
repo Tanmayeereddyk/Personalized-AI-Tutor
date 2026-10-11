@@ -1,59 +1,98 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
-import * as data from "./mockData";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { api } from "./api";
 import { useAuth } from "./auth";
-import type { Course, Material } from "./types";
+import type { Course, CourseColor, CourseIcon } from "./types";
 
 /**
- * Client-side mock store. Swap the initial values / mutations for real API
- * calls (e.g. a FastAPI backend via TanStack Query) without touching the UI.
+ * Store backed by the real backend (TanStack Query).
+ *
+ * There is no demo data here: courses come from GET /api/courses and every
+ * mutation round-trips to the server before the cache is refreshed. The
+ * cache key includes the signed-in user id and is cleared on login/logout
+ * (src/lib/auth.tsx), so switching accounts never leaks another user's list.
  */
+export interface StoreUser {
+  id: string;
+  name: string;
+  role: string;
+  email: string;
+}
+
+export interface CourseInput {
+  name: string;
+  code: string;
+  description?: string | undefined;
+  color: CourseColor;
+  icon: CourseIcon;
+}
+
 interface Store {
-  user: typeof data.currentUser;
+  user: StoreUser;
   courses: Course[];
-  addCourse: (c: Omit<Course, "id" | "mastery" | "topicCount" | "materialCount">) => Course;
-  materials: Material[];
-  addMaterials: (m: Material[]) => void;
-  updateMaterial: (id: string, patch: Partial<Material>) => void;
+  coursesLoading: boolean;
+  coursesError: string | null;
   addCourseOpen: boolean;
   setAddCourseOpen: (o: boolean) => void;
+  createCourse: (input: CourseInput) => Promise<Course>;
+  removeCourse: (id: string) => Promise<void>;
+  reloadCourses: () => void;
 }
 
 const Ctx = createContext<Store | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
-  const user = auth.user ? { ...data.currentUser, name: auth.user.name } : data.currentUser;
-  const [courses, setCourses] = useState<Course[]>(data.courses);
-  const [materials, setMaterials] = useState<Material[]>(data.materials);
+  const queryClient = useQueryClient();
   const [addCourseOpen, setAddCourseOpen] = useState(false);
 
-  const addCourse: Store["addCourse"] = (c) => {
-    const base = c.code.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "course";
-    let id = base;
-    let i = 2;
-    while (courses.some((x) => x.id === id)) id = `${base}-${i++}`;
-    const course: Course = { ...c, id, mastery: 0, topicCount: 0, materialCount: 0 };
-    setCourses((prev) => [...prev, course]);
-    return course;
+  const coursesQuery = useQuery({
+    queryKey: ["courses", auth.user?.id],
+    queryFn: () => api.courses.list(),
+    enabled: !!auth.user,
+  });
+
+  const user: StoreUser = {
+    id: auth.user?.id ?? "",
+    name: auth.user?.name ?? "Student",
+    role: "Student",
+    email: auth.user?.email ?? "",
   };
 
-  return (
-    <Ctx.Provider
-      value={{
-        user,
-        courses,
-        addCourse,
-        materials,
-        addCourseOpen,
-        setAddCourseOpen,
-        addMaterials: (m) => setMaterials((prev) => [...m, ...prev]),
-        updateMaterial: (id, patch) =>
-          setMaterials((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x))),
-      }}
-    >
-      {children}
-    </Ctx.Provider>
-  );
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["courses", auth.user?.id] });
+
+  const value: Store = {
+    user,
+    courses: coursesQuery.data ?? [],
+    coursesLoading: coursesQuery.isLoading,
+    coursesError: coursesQuery.isError
+      ? (coursesQuery.error as Error).message
+      : null,
+    addCourseOpen,
+    setAddCourseOpen,
+    createCourse: async (input) => {
+      const course = await api.courses.create({
+        name: input.name,
+        code: input.code.toUpperCase(),
+        description: input.description,
+        color: input.color,
+        icon: input.icon,
+      });
+      await invalidate();
+      return course;
+    },
+    removeCourse: async (id) => {
+      await api.courses.remove(id);
+      await invalidate();
+    },
+    reloadCourses: () => {
+      void invalidate();
+    },
+  };
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useStore() {
@@ -65,9 +104,3 @@ export function useStore() {
 export function useCourse(id: string) {
   return useStore().courses.find((c) => c.id === id);
 }
-
-export const getTopics = (courseId: string) => data.topicsByCourse[courseId] ?? [];
-export const getNotes = (courseId: string) => data.notes.filter((n) => n.courseId === courseId);
-export const getQuizzes = (courseId: string) => data.quizzes.filter((n) => n.courseId === courseId);
-export const getDecks = (courseId: string) => data.flashcardDecks.filter((n) => n.courseId === courseId);
-export const getAssessments = (courseId: string) => data.assessments.filter((n) => n.courseId === courseId);
