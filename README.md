@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # StudyAI Backend
 
 The backend for **StudyAI**, an AI-powered study assistant built for an AI/ML hackathon.
@@ -7,6 +6,11 @@ The backend for **StudyAI**, an AI-powered study assistant built for an AI/ML ha
 > Part 1 gave us the foundation (app, config, health check). Part 2 added Supabase,
 > email/password authentication, user profiles, and courses protected by Row Level Security.
 > AI features (Gemini, RAG, quizzes, ...) come in later phases.
+
+The full-stack app has two parts in this repository:
+
+- **Backend** (FastAPI + Python) — lives in the project root: `app/`, `tests/`, `requirements.txt`
+- **Frontend** (React 19 + TanStack Start + Vite + TypeScript) — lives in `src/`, scripts in `package.json`
 
 ---
 
@@ -19,7 +23,7 @@ The backend for **StudyAI**, an AI-powered study assistant built for an AI/ML ha
 
 ## 2. What is Supabase? Why does StudyAI use it?
 
-**Supabase** is an open-source backend platform that gives you:
+**Supabase** is an open-source backend platform that gives us:
 
 - a **PostgreSQL database** (tables, queries, indexes),
 - **authentication** (signup, login, sessions) out of the box,
@@ -97,21 +101,21 @@ JSON response
 ## 5. Folder structure
 
 ```text
-backend/
-├── app/
-│   ├── main.py                  # Creates the app, CORS, registers routers
+StudyAI (project root)
+├── app/                    # FastAPI backend
+│   ├── main.py             # Creates the app, CORS, registers routers
 │   ├── core/
-│   │   └── config.py            # All settings from environment variables (.env)
+│   │   └── config.py       # All settings from environment variables (.env)
 │   ├── api/
-│   │   ├── dependencies.py      # get_supabase, get_current_user (401 logic)
+│   │   ├── dependencies.py # get_supabase, get_current_user (401 logic)
 │   │   └── routes/
-│   │       ├── health.py        # GET /health
-│   │       ├── auth.py          # /api/auth/* (signup, login, me, logout)
-│   │       └── courses.py       # /api/courses/* (CRUD, all protected)
+│   │       ├── health.py   # GET /health
+│   │       ├── auth.py     # /api/auth/* (signup, login, me, logout)
+│   │       └── courses.py  # /api/courses/* (CRUD, all protected)
 │   ├── schemas/
-│   │   ├── health.py            # HealthResponse
-│   │   ├── auth.py              # SignupRequest, SessionResponse, MeResponse, ...
-│   │   └── course.py            # CourseCreate / CourseUpdate / CourseResponse
+│   │   ├── health.py       # HealthResponse
+│   │   ├── auth.py         # SignupRequest, SessionResponse, MeResponse, ...
+│   │   └── course.py       # CourseCreate / CourseUpdate / CourseResponse
 │   ├── services/
 │   │   ├── health_service.py    # Health-check logic
 │   │   ├── auth_service.py      # Signup/login/me/logout logic
@@ -120,18 +124,21 @@ backend/
 │       └── supabase.py          # The two Supabase clients (anon + service role)
 │
 ├── database/
-│   └── schema.sql               # Tables, indexes, trigger, RLS policies
+│   └── schema.sql          # Tables, indexes, trigger, RLS policies
 │
 ├── tests/
-│   ├── conftest.py              # Fake Supabase + shared fixtures (tests run offline)
-│   ├── test_health.py           # Part 1 health tests
-│   ├── test_auth.py             # Auth routes, validation, 401s, schemas
-│   └── test_courses.py          # Course routes, 401s, ownership, validation
+│   ├── conftest.py         # Fake Supabase + shared fixtures (tests run offline)
+│   ├── test_health.py      # Part 1 health tests
+│   ├── test_auth.py        # Auth routes, validation, 401s, schemas
+│   └── test_courses.py     # Course routes, 401s, ownership, validation
 │
 ├── requirements.txt
-├── .env.example                 # Template — copy to .env and fill in
-├── .gitignore                   # .env is ignored by Git
-└── README.md                    # This file
+├── .env.example            # Template — copy to .env and fill in
+├── .gitignore              # .env is ignored by Git
+│
+├── src/                    # React + TanStack Start frontend (routes, components, lib)
+├── package.json            # Frontend scripts: dev, build, lint, test
+└── README.md               # This file
 ```
 
 ## 6. API endpoints
@@ -152,10 +159,11 @@ backend/
 
 ## 7. Getting started (Windows PowerShell)
 
-Open PowerShell and go to the backend folder:
+The backend lives in the **project root** (the `app/` folder), next to the React
+frontend (`src/`). Open PowerShell and go to the project root:
 
 ```powershell
-cd "C:\Users\Lenovo\OneDrive\hackathon\backend"
+cd "C:\Users\Tanmayee\Personalized-AI-Tutor"
 ```
 
 ### Step 1 — Create and activate a virtual environment
@@ -173,6 +181,23 @@ python -m venv venv
 ```powershell
 pip install -r requirements.txt
 ```
+
+### Step 3 — Start the frontend (separate terminal)
+
+The frontend dependencies are already installed (`node_modules/`). If not:
+
+```powershell
+npm i
+```
+
+Then start the dev server:
+
+```powershell
+npm run dev
+```
+
+The frontend talks to the backend over HTTP; CORS allows the origin set in
+`FRONTEND_URL` (see step 5 below).
 
 ## 8. Create a Supabase project
 
@@ -283,7 +308,7 @@ Authorization: Bearer <your access_token>
 
 ## 14. Run the tests
 
-With the virtual environment active, from the `backend/` folder:
+With the virtual environment active, from the **project root**:
 
 ```powershell
 pytest
@@ -297,6 +322,12 @@ pytest -v
 
 Tests use a **fake Supabase client** (`tests/conftest.py`), so they run fully
 offline — no real Supabase account, keys, or internet required.
+
+Frontend tests (route matching) run with:
+
+```powershell
+npm test
+```
 
 ## 15. Security notes
 
@@ -314,29 +345,3 @@ offline — no real Supabase account, keys, or internet required.
 3. **Route** → `app/api/routes/<feature>.py` (HTTP + `Depends(get_current_user)`)
 4. **Register** → `app/main.py`: `app.include_router(...)` (keep main.py small)
 5. **Test** → `tests/test_<feature>.py`
-=======
-# Pixel Perfect Pixels
-
-Implement exactly the screenshot and nothing else
-
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/9eab364a-cc2f-442a-9b8a-d7ec9e6c4dcf).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
-```
->>>>>>> 2674cd1b6eb01f6de554c5a7016018c5678dd640
