@@ -137,7 +137,9 @@ function RootComponent() {
 
 const PUBLIC = ["/login", "/signup"];
 
-/** Client-side guard for the mock auth: app pages require a session. */
+/** Client-side route guard: private pages require an authenticated user.
+ * `ready` only flips after the stored token has been validated, so no
+ * redirect happens before authentication has actually been checked. */
 function AuthGate() {
   const { user, ready } = useAuth();
   const navigate = useNavigate();

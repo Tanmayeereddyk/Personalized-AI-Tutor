@@ -220,7 +220,7 @@ Then edit `.env` and fill in your Supabase values:
 ```text
 APP_NAME=StudyAI Backend
 APP_ENV=development
-FRONTEND_URL=http://localhost:3000
+FRONTEND_URL=http://localhost:8080
 
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
