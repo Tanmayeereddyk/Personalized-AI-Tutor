@@ -34,6 +34,22 @@ def get_supabase() -> Client:
     return _anon_client
 
 
+def create_anon_client() -> Client:
+    """Create a brand-new anonymous Supabase client.
+
+    Password recovery has to *set a session* on a client (to the user's
+    recovery session) before Supabase will let it update their password.
+    That mutates client state, so recovery gets its own throwaway client
+    instead of disturbing the shared singleton used by every other request.
+    """
+    if not settings.SUPABASE_URL or not settings.SUPABASE_ANON_KEY:
+        raise RuntimeError(
+            "Supabase is not configured. Set SUPABASE_URL and "
+            "SUPABASE_ANON_KEY in backend/.env (see .env.example)."
+        )
+    return create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
+
+
 def get_service_client() -> Client:
     """Return the shared service-role Supabase client (for table access).
 

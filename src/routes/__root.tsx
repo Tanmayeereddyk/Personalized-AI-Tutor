@@ -135,22 +135,27 @@ function RootComponent() {
   );
 }
 
-const PUBLIC = ["/login", "/signup"];
+const PUBLIC = ["/login", "/signup", "/forgot-password", "/reset-password"];
+// Public pages an already signed-in visitor is sent home from.
+const BOUNCE_WHEN_AUTHENTICATED = ["/login", "/signup", "/forgot-password"];
 
 /** Client-side route guard: private pages require an authenticated user.
  * `ready` only flips after the stored token has been validated, so no
- * redirect happens before authentication has actually been checked. */
+ * redirect happens before authentication has actually been checked.
+ * `/reset-password` stays reachable while signed in so a recovery link
+ * always works. */
 function AuthGate() {
   const { user, ready } = useAuth();
   const navigate = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const isPublic = PUBLIC.includes(path);
+  const bounceAuthenticated = BOUNCE_WHEN_AUTHENTICATED.includes(path);
 
   useEffect(() => {
     if (!ready) return;
     if (!user && !isPublic) navigate({ to: "/login", replace: true });
-    if (user && isPublic) navigate({ to: "/", replace: true });
-  }, [ready, user, isPublic, navigate]);
+    if (user && bounceAuthenticated) navigate({ to: "/", replace: true });
+  }, [ready, user, isPublic, bounceAuthenticated, navigate]);
 
   if (isPublic) return <Outlet />;
   if (!ready || !user) return <div className="min-h-screen" />;

@@ -11,13 +11,15 @@ Rules followed here:
 
 from fastapi import HTTPException
 from supabase import AuthApiError, AuthError, Client, PostgrestAPIError
-
+from app.core.config import settings
 from app.schemas.auth import (
     AuthUser,
+    ForgotPasswordRequest,
     LoginRequest,
     MeResponse,
     MessageResponse,
     ProfileResponse,
+    ResetPasswordRequest,
     SessionResponse,
     SignupRequest,
     SignupResponse,
@@ -57,10 +59,10 @@ def signup(anon_client: Client, admin_client: Client, payload: SignupRequest) ->
         "email": payload.email,
         "password": payload.password,
     }
-    if payload.full_name:
-        # full_name is stored as Supabase user metadata (and copied to profiles).
-        credentials["options"] = {"data": {"full_name": payload.full_name}}
-
+    credentials["options"] = {
+        "email_redirect_to": f"{settings.FRONTEND_URL.rstrip('/')}/login",
+        "data": {"full_name": payload.full_name} if payload.full_name else {},
+    }
     try:
         result = anon_client.auth.sign_up(credentials)
     except AuthError as exc:
@@ -69,6 +71,18 @@ def signup(anon_client: Client, admin_client: Client, payload: SignupRequest) ->
 
     if result.user is None:
         raise HTTPException(status_code=400, detail="Signup failed")
+
+    # With email confirmation enabled, Supabase never reveals that an address
+    # is already registered: instead of an error it returns a fake user with a
+    # random id and an empty `identities` list. That id is not in auth.users,
+    # so writing a profile row for it breaks the profiles -> auth.users foreign
+    # key — which used to surface as a misleading "run schema.sql" message.
+    identities = getattr(result.user, "identities", None)
+    if identities is not None and len(identities) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="An account with this email already exists. Please log in instead.",
+        )
 
     user = AuthUser(id=result.user.id, email=result.user.email)
 
@@ -82,9 +96,16 @@ def signup(anon_client: Client, admin_client: Client, payload: SignupRequest) ->
             }
         ).execute()
     except PostgrestAPIError as exc:
+        # A missing table is the only failure that re-running the schema fixes;
+        # anything else (e.g. a foreign-key violation) is not a schema problem.
+        if getattr(exc, "code", None) in {"42P01", "PGRST205"}:
+            raise HTTPException(
+                status_code=500,
+                detail="Could not create profile. Run database/schema.sql in Supabase first.",
+            ) from exc
         raise HTTPException(
             status_code=500,
-            detail="Could not create profile. Run database/schema.sql in Supabase first.",
+            detail="Could not create your profile. Please try again.",
         ) from exc
 
     # With email confirmation enabled Supabase returns no session yet.
@@ -159,3 +180,76 @@ def logout(anon_client: Client, admin_client: Client, token: str) -> MessageResp
         pass
 
     return MessageResponse(message="Logged out successfully.")
+
+
+def request_password_reset(
+    anon_client: Client, payload: ForgotPasswordRequest
+) -> MessageResponse:
+    """Email the user a password-reset link.
+
+    The link points at the frontend's /reset-password page (redirect target
+    comes from FRONTEND_URL, never a hardcoded domain). The same success
+    message is returned whether or not the address has an account, so this
+    endpoint cannot be used to enumerate users.
+
+    The one exception is Supabase's mailer rate limit: it is independent of
+    account existence, and reporting it lets the user know to retry later
+    instead of waiting forever for an email that will never arrive.
+    """
+    redirect_to = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password"
+    try:
+        anon_client.auth.reset_password_for_email(
+            payload.email, {"redirect_to": redirect_to}
+        )
+    except AuthApiError as exc:
+        if getattr(exc, "status", None) == 429 or getattr(exc, "code", None) == (
+            "over_email_send_rate_limit"
+        ):
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Too many reset emails have been requested recently. "
+                    "Please wait a while and try again."
+                ),
+            ) from exc
+        # Any other failure stays hidden, so this endpoint cannot be used to
+        # discover which email addresses have accounts.
+    except AuthError:
+        pass
+
+    return MessageResponse(
+        message=(
+            "If an account exists for this email address, "
+            "you'll receive a password reset link shortly."
+        )
+    )
+
+
+def reset_password(
+    recovery_client: Client, verify_client: Client, payload: ResetPasswordRequest
+) -> MessageResponse:
+    """Set a new password for the user behind a recovery link.
+
+    A password can only be changed with a valid recovery session: the
+    access token from the emailed link is validated with Supabase first,
+    then used to authenticate the password update. Tokens and passwords are
+    never logged.
+    """
+    # 401 for missing, invalid or expired tokens.
+    get_user_from_token(verify_client, payload.access_token)
+
+    try:
+        recovery_client.auth.set_session(
+            payload.access_token, payload.refresh_token or ""
+        )
+        recovery_client.auth.update_user({"password": payload.new_password})
+    except AuthError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "This password reset link is invalid or has expired. "
+                "Please request a new one."
+            ),
+        ) from exc
+
+    return MessageResponse(message="Your password has been reset successfully.")

@@ -77,7 +77,12 @@ function LoginPage() {
         <div>
           <div className="flex items-center justify-between">
             <Label>Password</Label>
-            <button type="button" onClick={() => toast("Password reset isn't available yet.")} className="mb-2 text-xs text-muted-foreground hover:text-foreground">Forgot password?</button>
+            <Link
+              to="/forgot-password"
+              className="mb-2 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Forgot password?
+            </Link>
           </div>
           <input
             type="password"

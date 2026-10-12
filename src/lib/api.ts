@@ -19,7 +19,7 @@ import type {
 } from "./types";
 
 const BASE = (
-  (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:8000"
+  (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:8001"
 ).replace(/\/$/, "");
 
 const TOKEN_KEY = "studyai.token";
@@ -287,6 +287,7 @@ export const toNote = (dto: NoteDto): Note => ({
   title: dto.title,
   updated: friendlyDate(dto.updated_at),
   topics: dto.topics ?? [],
+  content: dto.content ?? undefined,
 });
 
 export const toQuiz = (dto: QuizDto): Quiz => ({
@@ -377,6 +378,30 @@ export const api = {
       } catch {
         /* the session is cleared locally regardless */
       }
+    },
+    async forgotPassword(email: string): Promise<string> {
+      const dto = await request<{ message: string }>("/api/auth/forgot-password", {
+        method: "POST",
+        auth: false,
+        body: { email },
+      });
+      return dto.message;
+    },
+    async resetPassword(input: {
+      accessToken: string;
+      refreshToken?: string | null;
+      newPassword: string;
+    }): Promise<string> {
+      const dto = await request<{ message: string }>("/api/auth/reset-password", {
+        method: "POST",
+        auth: false,
+        body: {
+          access_token: input.accessToken,
+          refresh_token: input.refreshToken ?? null,
+          new_password: input.newPassword,
+        },
+      });
+      return dto.message;
     },
   },
 
@@ -487,3 +512,4 @@ export const api = {
 };
 
 export { BASE as API_BASE_URL };
+

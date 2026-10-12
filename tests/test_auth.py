@@ -6,16 +6,30 @@ no real Supabase account or keys are required.
 
 import pytest
 from pydantic import ValidationError
+from supabase import AuthApiError, PostgrestAPIError
 
 from app.main import app
-from app.schemas.auth import AuthUser, SessionResponse, SignupRequest
+from app.schemas.auth import (
+    AuthUser,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    SessionResponse,
+    SignupRequest,
+)
 from tests.conftest import create_user
 
-AUTH_PATHS = {"/api/auth/signup", "/api/auth/login", "/api/auth/me", "/api/auth/logout"}
+AUTH_PATHS = {
+    "/api/auth/signup",
+    "/api/auth/login",
+    "/api/auth/me",
+    "/api/auth/logout",
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
+}
 
 
 def test_auth_routes_registered() -> None:
-    """All four auth routes must be present in the app."""
+    """All auth routes must be present in the app."""
     paths = set(app.openapi()["paths"])
     assert AUTH_PATHS <= paths
 
@@ -75,6 +89,61 @@ def test_signup_with_existing_email_is_400(client, fake_supabase) -> None:
     create_user(fake_supabase, email="ada@example.com")
     body = {"email": "ada@example.com", "password": "password123"}
     assert client.post("/api/auth/signup", json=body).status_code == 400
+
+
+def test_signup_existing_email_with_confirmation_skips_profile_write(
+    client, fake_supabase
+) -> None:
+    """An address that already exists must not trigger a profile insert.
+
+    With email confirmation on, Supabase returns a fake user (random id, empty
+    identities) for a known address. Writing a profile row for that id would
+    violate the profiles -> auth.users foreign key.
+    """
+    fake_supabase.auth.require_email_confirmation = True
+    body = {"email": "ada@example.com", "password": "password123", "full_name": "Ada"}
+
+    first = client.post("/api/auth/signup", json=body)
+    assert first.status_code == 201
+    assert first.json()["access_token"] is None
+
+    second = client.post("/api/auth/signup", json=body)
+    assert second.status_code == 400
+    assert "already exists" in second.json()["detail"].lower()
+
+    # Only the real first signup wrote a profile — nothing for the fake id.
+    assert len(fake_supabase.tables["profiles"]) == 1
+
+
+def test_signup_profile_failure_is_not_blamed_on_the_schema(
+    client, fake_supabase
+) -> None:
+    """A foreign-key (non-schema) profile error must not mention schema.sql."""
+    fake_supabase.table_errors["profiles"] = PostgrestAPIError(
+        {"message": "foreign key violation", "code": "23503", "details": "", "hint": ""}
+    )
+    body = {"email": "ada@example.com", "password": "password123"}
+    response = client.post("/api/auth/signup", json=body)
+
+    assert response.status_code == 500
+    assert "schema.sql" not in response.json()["detail"]
+
+
+def test_signup_profile_missing_table_points_at_the_schema(client, fake_supabase) -> None:
+    """A genuinely missing table still tells the user to run schema.sql."""
+    fake_supabase.table_errors["profiles"] = PostgrestAPIError(
+        {
+            "message": "Could not find the table 'public.profiles'",
+            "code": "PGRST205",
+            "details": "",
+            "hint": "",
+        }
+    )
+    body = {"email": "ada@example.com", "password": "password123"}
+    response = client.post("/api/auth/signup", json=body)
+
+    assert response.status_code == 500
+    assert "schema.sql" in response.json()["detail"]
 
 
 # ---------------------------------------------------------------
@@ -151,6 +220,171 @@ def test_logout_with_invalid_token_is_401(client) -> None:
 
 
 # ---------------------------------------------------------------
+# Forgot password
+# ---------------------------------------------------------------
+def test_forgot_password_with_missing_email_is_422(client) -> None:
+    assert client.post("/api/auth/forgot-password", json={}).status_code == 422
+
+
+def test_forgot_password_with_invalid_email_is_422(client) -> None:
+    response = client.post("/api/auth/forgot-password", json={"email": "not-an-email"})
+    assert response.status_code == 422
+
+
+def test_forgot_password_sends_link_to_reset_page(client, fake_supabase) -> None:
+    create_user(fake_supabase, email="ada@example.com")
+    response = client.post("/api/auth/forgot-password", json={"email": "ada@example.com"})
+
+    assert response.status_code == 200
+    assert "reset link" in response.json()["message"].lower()
+
+    assert len(fake_supabase.auth.reset_emails) == 1
+    sent = fake_supabase.auth.reset_emails[0]
+    assert sent["email"] == "ada@example.com"
+    # Redirect target comes from config and points at the reset page.
+    assert sent["redirect_to"].endswith("/reset-password")
+
+
+def test_forgot_password_does_not_reveal_account_existence(client, fake_supabase) -> None:
+    """Unknown and known emails get the exact same response."""
+    create_user(fake_supabase, email="ada@example.com")
+    known = client.post("/api/auth/forgot-password", json={"email": "ada@example.com"})
+    unknown = client.post("/api/auth/forgot-password", json={"email": "nobody@example.com"})
+
+    assert known.status_code == unknown.status_code == 200
+    assert known.json() == unknown.json()
+
+
+def test_forgot_password_surfaces_mailer_rate_limit(client, fake_supabase) -> None:
+    """Supabase's mailer rate limit is reported, not hidden as a fake success.
+
+    Hitting the limit has nothing to do with whether the account exists, so
+    telling the user to wait leaks nothing and avoids a silent no-op.
+    """
+    fake_supabase.auth.reset_error = AuthApiError(
+        "email rate limit exceeded", 429, "over_email_send_rate_limit"
+    )
+
+    response = client.post("/api/auth/forgot-password", json={"email": "ada@example.com"})
+
+    assert response.status_code == 429
+    assert "wait" in response.json()["detail"].lower()
+    assert fake_supabase.auth.reset_emails == []
+
+
+def test_forgot_password_hides_other_send_errors(client, fake_supabase) -> None:
+    """Non-rate-limit failures still return the generic success (no enum leak)."""
+    fake_supabase.auth.reset_error = AuthApiError("smtp exploded", 500, "unexpected_failure")
+
+    response = client.post("/api/auth/forgot-password", json={"email": "ada@example.com"})
+
+    assert response.status_code == 200
+    assert "reset link" in response.json()["message"].lower()
+
+
+# ---------------------------------------------------------------
+# Reset password
+# ---------------------------------------------------------------
+def test_reset_password_with_missing_fields_is_422(client) -> None:
+    assert client.post("/api/auth/reset-password", json={}).status_code == 422
+
+
+def test_reset_password_with_short_password_is_422(client, fake_supabase) -> None:
+    user, _ = create_user(fake_supabase, email="ada@example.com")
+    body = {"access_token": f"token-{user.id}", "new_password": "short"}
+    assert client.post("/api/auth/reset-password", json=body).status_code == 422
+
+
+def test_reset_password_with_invalid_token_is_401(client) -> None:
+    body = {"access_token": "not-a-real-token", "new_password": "password456"}
+    assert client.post("/api/auth/reset-password", json=body).status_code == 401
+
+
+def test_reset_password_updates_password(client, fake_supabase) -> None:
+    user, _ = create_user(fake_supabase, email="ada@example.com", password="password123")
+    body = {
+        "access_token": f"token-{user.id}",
+        "refresh_token": "refresh-x",
+        "new_password": "newpassword456",
+    }
+    response = client.post("/api/auth/reset-password", json=body)
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Your password has been reset successfully."
+
+    # The new password works and the old one no longer does.
+    assert (
+        client.post(
+            "/api/auth/login",
+            json={"email": "ada@example.com", "password": "newpassword456"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/auth/login",
+            json={"email": "ada@example.com", "password": "password123"},
+        ).status_code
+        == 401
+    )
+
+
+def test_reset_password_does_not_store_password_in_tables(client, fake_supabase) -> None:
+    user, _ = create_user(fake_supabase, email="ada@example.com")
+    client.post(
+        "/api/auth/reset-password",
+        json={"access_token": f"token-{user.id}", "new_password": "newpassword456"},
+    )
+    for rows in fake_supabase.tables.values():
+        for row in rows:
+            assert "password" not in row
+
+
+def test_reset_password_without_refresh_token_still_updates(client, fake_supabase) -> None:
+    """A non-expired recovery access token is enough (refresh_token is optional)."""
+    user, _ = create_user(fake_supabase, email="ada@example.com", password="password123")
+    body = {"access_token": f"token-{user.id}", "new_password": "newpassword456"}
+
+    assert client.post("/api/auth/reset-password", json=body).status_code == 200
+    assert (
+        client.post(
+            "/api/auth/login", json={"email": "ada@example.com", "password": "newpassword456"}
+        ).status_code
+        == 200
+    )
+
+
+def test_reset_password_uses_the_supplied_recovery_session(client, fake_supabase) -> None:
+    """The password is changed on a session built from the caller's token —
+    i.e. Supabase itself decides which account (and only that account) is
+    affected; the request body never names a user id."""
+    user, _ = create_user(fake_supabase, email="ada@example.com")
+    token = f"token-{user.id}"
+
+    client.post(
+        "/api/auth/reset-password",
+        json={"access_token": token, "refresh_token": "refresh-x", "new_password": "newpassword456"},
+    )
+
+    assert fake_supabase.auth._session is not None
+    assert fake_supabase.auth._session["access_token"] == token
+
+
+def test_reset_password_when_supabase_rejects_update_is_400(client, fake_supabase) -> None:
+    """A token that verifies but can no longer update (revoked/used) is a 400."""
+    user, _ = create_user(fake_supabase, email="ada@example.com")
+    fake_supabase.auth.update_error = AuthApiError("Token has expired or is invalid", 403, None)
+
+    response = client.post(
+        "/api/auth/reset-password",
+        json={"access_token": f"token-{user.id}", "new_password": "newpassword456"},
+    )
+
+    assert response.status_code == 400
+    assert "invalid or has expired" in response.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------
 # Response / request schemas
 # ---------------------------------------------------------------
 def test_session_response_defaults_to_bearer() -> None:
@@ -161,3 +395,15 @@ def test_session_response_defaults_to_bearer() -> None:
 def test_signup_request_requires_strong_password() -> None:
     with pytest.raises(ValidationError):
         SignupRequest(email="ada@example.com", password="short")
+
+
+def test_forgot_password_request_requires_valid_email() -> None:
+    with pytest.raises(ValidationError):
+        ForgotPasswordRequest(email="not-an-email")
+
+
+def test_reset_password_request_requires_strong_password_and_token() -> None:
+    with pytest.raises(ValidationError):
+        ResetPasswordRequest(access_token="x", new_password="short")
+    with pytest.raises(ValidationError):
+        ResetPasswordRequest(access_token="", new_password="password123")

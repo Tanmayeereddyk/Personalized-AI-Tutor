@@ -10,9 +10,13 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
-from supabase import AuthApiError
+from supabase import AuthApiError, AuthSessionMissingError
 
-from app.api.dependencies import get_service_supabase, get_supabase
+from app.api.dependencies import (
+    get_recovery_supabase,
+    get_service_supabase,
+    get_supabase,
+)
 from app.main import app
 
 
@@ -27,16 +31,34 @@ class FakeAuth:
         self.users: dict[str, dict] = {}        # id -> user
         self.passwords: dict[str, str] = {}     # email -> password
         self.signed_out: list[str] = []         # revoked tokens
+        self.reset_emails: list[dict] = []      # password-reset requests
+        self.reset_error: Exception | None = None  # optional send failure
+        self.update_error: Exception | None = None  # optional update failure
+        self._session: dict | None = None       # set by set_session()
         self.require_email_confirmation = False
         self.admin = SimpleNamespace(sign_out=self._sign_out)
 
     def sign_up(self, credentials: dict) -> SimpleNamespace:
         email: str = credentials["email"]
         if email in self.passwords:
+            if self.require_email_confirmation:
+                # Real Supabase behaviour: with email confirmation enabled it
+                # never says "already registered". It returns a fake user with
+                # a random id and an empty identities list instead.
+                fake = {
+                    "id": str(uuid.uuid4()),
+                    "email": email,
+                    "identities": [],
+                }
+                return SimpleNamespace(user=SimpleNamespace(**fake), session=None)
             raise AuthApiError("User already registered", 400, None)
 
         user_id = str(uuid.uuid4())
-        user = {"id": user_id, "email": email}
+        user = {
+            "id": user_id,
+            "email": email,
+            "identities": [{"provider": "email"}],
+        }
         self.users[user_id] = user
         self.passwords[email] = credentials["password"]
 
@@ -71,6 +93,39 @@ class FakeAuth:
             raise AuthApiError("invalid JWT", 401, None)
         return SimpleNamespace(user=SimpleNamespace(**self.users[user_id]))
 
+    def reset_password_for_email(self, email: str, options: dict | None = None) -> None:
+        if self.reset_error is not None:
+            raise self.reset_error
+        self.reset_emails.append(
+            {"email": email, "redirect_to": (options or {}).get("redirect_to")}
+        )
+
+    def set_session(self, access_token: str, refresh_token: str) -> SimpleNamespace:
+        if not access_token or not access_token.startswith("token-"):
+            raise AuthApiError("invalid JWT", 401, None)
+        user_id = access_token.removeprefix("token-")
+        if user_id not in self.users:
+            raise AuthApiError("invalid JWT", 401, None)
+        self._session = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "user_id": user_id,
+        }
+        return SimpleNamespace(
+            session=self._session, user=SimpleNamespace(**self.users[user_id])
+        )
+
+    def update_user(self, attributes: dict) -> SimpleNamespace:
+        if self.update_error is not None:
+            raise self.update_error
+        if self._session is None:
+            raise AuthSessionMissingError()
+        user_id = self._session["user_id"]
+        email = self.users[user_id]["email"]
+        if attributes.get("password"):
+            self.passwords[email] = attributes["password"]
+        return SimpleNamespace(user=SimpleNamespace(**self.users[user_id]))
+
     def _sign_out(self, jwt: str, scope: str = "global") -> None:
         self.signed_out.append(jwt)
 
@@ -85,6 +140,7 @@ class FakeQuery:
         self._filters: list[tuple[str, object]] = []
         self._single = False
         self._desc = False
+        self._error: Exception | None = None
 
     # -- builders -------------------------------------------------
     def select(self, *columns: str) -> "FakeQuery":
@@ -123,6 +179,9 @@ class FakeQuery:
         return all(row.get(col) == val for col, val in self._filters)
 
     def execute(self) -> SimpleNamespace:
+        if self._error is not None:
+            raise self._error
+
         if self._op == "insert":
             row = {
                 "id": str(uuid.uuid4()),
@@ -205,9 +264,15 @@ class FakeSupabase:
         self.tables: dict[str, list[dict]] = {}
         self.stored_objects: dict[str, bytes] = {}
         self.storage = FakeStorage(self)
+        # Optional per-table errors, so tests can simulate PostgREST failures.
+        self.table_errors: dict[str, Exception] = {}
 
     def table(self, name: str) -> FakeQuery:
-        return FakeQuery(self.tables.setdefault(name, []))
+        query = FakeQuery(self.tables.setdefault(name, []))
+        error = self.table_errors.get(name)
+        if error is not None:
+            query._error = error
+        return query
 
 
 def create_user(
@@ -229,6 +294,7 @@ def client(fake_supabase: FakeSupabase):
     """Test client with Supabase replaced by the fake."""
     app.dependency_overrides[get_supabase] = lambda: fake_supabase
     app.dependency_overrides[get_service_supabase] = lambda: fake_supabase
+    app.dependency_overrides[get_recovery_supabase] = lambda: fake_supabase
     test_client = TestClient(app)
     yield test_client
     app.dependency_overrides.clear()
