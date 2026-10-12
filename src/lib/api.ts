@@ -19,7 +19,7 @@ import type {
 } from "./types";
 
 const BASE = (
-  (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:8001"
+  (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:8000"
 ).replace(/\/$/, "");
 
 const TOKEN_KEY = "studyai.token";
