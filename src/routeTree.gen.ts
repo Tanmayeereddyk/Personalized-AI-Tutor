@@ -22,6 +22,7 @@ import { Route as CoursesCourseIdFlashcardsRouteImport } from './routes/courses.
 import { Route as CoursesCourseIdMaterialsRouteImport } from './routes/courses.$courseId.materials'
 import { Route as CoursesCourseIdNotesRouteImport } from './routes/courses.$courseId.notes'
 import { Route as CoursesCourseIdQuizzesRouteImport } from './routes/courses.$courseId.quizzes'
+import { Route as CoursesCourseIdStudyRouteImport } from './routes/courses.$courseId.study'
 import { Route as CoursesCourseIdTopicsRouteImport } from './routes/courses.$courseId.topics'
 import { Route as CoursesCourseIdTutorRouteImport } from './routes/courses.$courseId.tutor'
 
@@ -93,6 +94,11 @@ const CoursesCourseIdQuizzesRoute = CoursesCourseIdQuizzesRouteImport.update({
   path: '/quizzes',
   getParentRoute: () => CoursesCourseIdRoute,
 } as any)
+const CoursesCourseIdStudyRoute = CoursesCourseIdStudyRouteImport.update({
+  id: '/study',
+  path: '/study',
+  getParentRoute: () => CoursesCourseIdRoute,
+} as any)
 const CoursesCourseIdTopicsRoute = CoursesCourseIdTopicsRouteImport.update({
   id: '/topics',
   path: '/topics',
@@ -117,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/courses/$courseId/materials': typeof CoursesCourseIdMaterialsRoute
   '/courses/$courseId/notes': typeof CoursesCourseIdNotesRoute
   '/courses/$courseId/quizzes': typeof CoursesCourseIdQuizzesRoute
+  '/courses/$courseId/study': typeof CoursesCourseIdStudyRoute
   '/courses/$courseId/topics': typeof CoursesCourseIdTopicsRoute
   '/courses/$courseId/tutor': typeof CoursesCourseIdTutorRoute
   '/courses/$courseId/': typeof CoursesCourseIdIndexRoute
@@ -133,6 +140,7 @@ export interface FileRoutesByTo {
   '/courses/$courseId/materials': typeof CoursesCourseIdMaterialsRoute
   '/courses/$courseId/notes': typeof CoursesCourseIdNotesRoute
   '/courses/$courseId/quizzes': typeof CoursesCourseIdQuizzesRoute
+  '/courses/$courseId/study': typeof CoursesCourseIdStudyRoute
   '/courses/$courseId/topics': typeof CoursesCourseIdTopicsRoute
   '/courses/$courseId/tutor': typeof CoursesCourseIdTutorRoute
   '/courses/$courseId': typeof CoursesCourseIdIndexRoute
@@ -151,6 +159,7 @@ export interface FileRoutesById {
   '/courses/$courseId/materials': typeof CoursesCourseIdMaterialsRoute
   '/courses/$courseId/notes': typeof CoursesCourseIdNotesRoute
   '/courses/$courseId/quizzes': typeof CoursesCourseIdQuizzesRoute
+  '/courses/$courseId/study': typeof CoursesCourseIdStudyRoute
   '/courses/$courseId/topics': typeof CoursesCourseIdTopicsRoute
   '/courses/$courseId/tutor': typeof CoursesCourseIdTutorRoute
   '/courses/$courseId/': typeof CoursesCourseIdIndexRoute
@@ -170,6 +179,7 @@ export interface FileRouteTypes {
     | '/courses/$courseId/materials'
     | '/courses/$courseId/notes'
     | '/courses/$courseId/quizzes'
+    | '/courses/$courseId/study'
     | '/courses/$courseId/topics'
     | '/courses/$courseId/tutor'
     | '/courses/$courseId/'
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/courses/$courseId/materials'
     | '/courses/$courseId/notes'
     | '/courses/$courseId/quizzes'
+    | '/courses/$courseId/study'
     | '/courses/$courseId/topics'
     | '/courses/$courseId/tutor'
     | '/courses/$courseId'
@@ -203,6 +214,7 @@ export interface FileRouteTypes {
     | '/courses/$courseId/materials'
     | '/courses/$courseId/notes'
     | '/courses/$courseId/quizzes'
+    | '/courses/$courseId/study'
     | '/courses/$courseId/topics'
     | '/courses/$courseId/tutor'
     | '/courses/$courseId/'
@@ -311,6 +323,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CoursesCourseIdQuizzesRouteImport
       parentRoute: typeof CoursesCourseIdRoute
     }
+    '/courses/$courseId/study': {
+      id: '/courses/$courseId/study'
+      path: '/study'
+      fullPath: '/courses/$courseId/study'
+      preLoaderRoute: typeof CoursesCourseIdStudyRouteImport
+      parentRoute: typeof CoursesCourseIdRoute
+    }
     '/courses/$courseId/topics': {
       id: '/courses/$courseId/topics'
       path: '/topics'
@@ -334,6 +353,7 @@ interface CoursesCourseIdRouteChildren {
   CoursesCourseIdMaterialsRoute: typeof CoursesCourseIdMaterialsRoute
   CoursesCourseIdNotesRoute: typeof CoursesCourseIdNotesRoute
   CoursesCourseIdQuizzesRoute: typeof CoursesCourseIdQuizzesRoute
+  CoursesCourseIdStudyRoute: typeof CoursesCourseIdStudyRoute
   CoursesCourseIdTopicsRoute: typeof CoursesCourseIdTopicsRoute
   CoursesCourseIdTutorRoute: typeof CoursesCourseIdTutorRoute
   CoursesCourseIdIndexRoute: typeof CoursesCourseIdIndexRoute
@@ -345,6 +365,7 @@ const CoursesCourseIdRouteChildren: CoursesCourseIdRouteChildren = {
   CoursesCourseIdMaterialsRoute: CoursesCourseIdMaterialsRoute,
   CoursesCourseIdNotesRoute: CoursesCourseIdNotesRoute,
   CoursesCourseIdQuizzesRoute: CoursesCourseIdQuizzesRoute,
+  CoursesCourseIdStudyRoute: CoursesCourseIdStudyRoute,
   CoursesCourseIdTopicsRoute: CoursesCourseIdTopicsRoute,
   CoursesCourseIdTutorRoute: CoursesCourseIdTutorRoute,
   CoursesCourseIdIndexRoute: CoursesCourseIdIndexRoute,

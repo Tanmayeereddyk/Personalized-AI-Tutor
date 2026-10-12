@@ -62,6 +62,18 @@ export const useQuizzes = (courseId: string) => {
   });
 };
 
+export const useCreateQuiz = (courseId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; topic?: string | undefined; difficulty: string; score?: number; total?: number }) =>
+      api.quizzes.create(courseId, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quizzes", user?.id, courseId] });
+    },
+  });
+};
+
 export const useFlashcardDecks = (courseId: string) => {
   const { user } = useAuth();
   return useQuery({
@@ -71,11 +83,34 @@ export const useFlashcardDecks = (courseId: string) => {
   });
 };
 
+export const useCreateDeck = (courseId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { topic: string; card_count?: number }) => api.decks.create(courseId, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["flashcard-decks", user?.id, courseId] });
+    },
+  });
+};
+
 export const useAssessments = (courseId: string) => {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["assessments", user?.id, courseId],
     queryFn: () => api.assessments.list(courseId),
     enabled: !!user && !!courseId,
+  });
+};
+
+export const useCreateAssessment = (courseId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; topics?: string[]; score?: number; total?: number; duration_minutes?: number }) =>
+      api.assessments.create(courseId, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assessments", user?.id, courseId] });
+    },
   });
 };

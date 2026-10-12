@@ -1,9 +1,10 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
-import { ArrowLeft, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useCourse, useStore } from "@/lib/store";
 import { CourseBadge } from "@/components/ui/kit";
+import { EditCourseModal } from "@/components/courses/AddCourseModal";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/courses/$courseId")({
@@ -36,6 +37,7 @@ function CourseLayout() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const isTutor = path.endsWith("/tutor");
   const [deleting, setDeleting] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   if (!course) {
     if (coursesLoading) {
@@ -88,6 +90,9 @@ function CourseLayout() {
         </div>
         {!isTutor && (
           <div className="flex items-center gap-2">
+            <button className="btn btn-ghost" onClick={() => setEditing(true)} disabled={deleting}>
+              <Pencil className="h-4 w-4" />Edit
+            </button>
             <button className="btn btn-ghost text-destructive" onClick={removeThisCourse} disabled={deleting}>
               {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Delete
             </button>
@@ -124,6 +129,8 @@ function CourseLayout() {
       <div className="fade-up pt-8" key={path}>
         <Outlet />
       </div>
+
+      <EditCourseModal course={course} open={editing} onOpenChange={setEditing} />
     </div>
   );
 }

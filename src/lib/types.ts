@@ -31,9 +31,10 @@ export type MaterialStatus = "processing" | "ready" | "attention";
 export interface Material {
   id: string; courseId: string; name: string; type: MaterialType;
   kind: string; meta: string; added: string; status: MaterialStatus;
+  mimeType?: string | undefined;
 }
 
-export interface Note { id: string; courseId: string; title: string; updated: string; topics: string[] }
+export interface Note { id: string; courseId: string; title: string; updated: string; topics: string[]; content?: string | undefined }
 
 export type Difficulty = "Easy" | "Medium" | "Hard" | "Mixed";
 export interface Quiz {

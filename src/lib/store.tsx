@@ -36,6 +36,7 @@ interface Store {
   addCourseOpen: boolean;
   setAddCourseOpen: (o: boolean) => void;
   createCourse: (input: CourseInput) => Promise<Course>;
+  updateCourse: (id: string, input: CourseInput) => Promise<Course>;
   removeCourse: (id: string) => Promise<void>;
   reloadCourses: () => void;
 }
@@ -74,6 +75,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setAddCourseOpen,
     createCourse: async (input) => {
       const course = await api.courses.create({
+        name: input.name,
+        code: input.code.toUpperCase(),
+        description: input.description,
+        color: input.color,
+        icon: input.icon,
+      });
+      await invalidate();
+      return course;
+    },
+    updateCourse: async (id, input) => {
+      const course = await api.courses.update(id, {
         name: input.name,
         code: input.code.toUpperCase(),
         description: input.description,

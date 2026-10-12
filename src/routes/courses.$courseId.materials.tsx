@@ -1,8 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
-import { FileText, Presentation, Video, File, Plus, UploadCloud, CheckCircle2, Loader2, AlertCircle, FolderOpen, Trash2, ExternalLink } from "lucide-react";
+import { FileText, Presentation, Video, File, Plus, UploadCloud, CheckCircle2, Loader2, AlertCircle, FolderOpen, Trash2, BookOpen } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
 import { useDeleteMaterial, useMaterials, useUploadMaterials } from "@/lib/queries";
 import type { Material, MaterialType } from "@/lib/types";
 import { EmptyState, Modal, PageHeader } from "@/components/ui/kit";
@@ -23,6 +22,7 @@ export function StatusChip({ status }: { status: Material["status"] }) {
 
 function Materials() {
   const { courseId } = Route.useParams();
+  const navigate = useNavigate();
   const materials = useMaterials(courseId);
   const upload = useUploadMaterials(courseId);
   const remove = useDeleteMaterial(courseId);
@@ -30,6 +30,7 @@ function Materials() {
   const [open, setOpen] = useState(false);
   const [drag, setDrag] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState<Material | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   const handleFiles = async (files: FileList | null) => {
@@ -45,19 +46,19 @@ function Materials() {
     }
   };
 
-  const openMaterial = async (id: string) => {
-    try {
-      const url = await api.materials.url(id);
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not open the file.");
-    }
+  const openWorkspace = (id: string) => {
+    void navigate({
+      to: "/courses/$courseId/study",
+      params: { courseId },
+      search: { material: id },
+    });
   };
 
   const removeMaterial = async (id: string) => {
     try {
       await remove.mutateAsync(id);
       setRecent((r) => r.filter((x) => x !== id));
+      setConfirmDelete(null);
       toast.success("Material removed.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not remove the material.");
@@ -94,10 +95,10 @@ function Materials() {
                 <div className="mt-1 text-sm text-muted-foreground">{m.kind} · {m.meta}</div>
                 <div className="mt-1 text-xs text-muted-foreground">{m.added}</div>
                 <div className="mt-5 flex items-center gap-1">
-                  <button className="btn btn-ghost self-start" disabled={m.status === "processing"} onClick={() => openMaterial(m.id)}>
-                    <ExternalLink className="h-4 w-4" />Open
+                  <button className="btn btn-ghost self-start" disabled={m.status === "processing"} onClick={() => openWorkspace(m.id)}>
+                    <BookOpen className="h-4 w-4" />View
                   </button>
-                  <button className="btn btn-ghost self-start text-destructive" onClick={() => removeMaterial(m.id)} disabled={remove.isPending}>
+                  <button className="btn btn-ghost self-start text-destructive" onClick={() => setConfirmDelete(m)} disabled={remove.isPending}>
                     <Trash2 className="h-4 w-4" />Remove
                   </button>
                 </div>
@@ -141,6 +142,17 @@ function Materials() {
           </div>
         )}
         <div className="mt-6 flex justify-end"><button className="btn btn-ghost" onClick={() => setOpen(false)}>Done</button></div>
+      </Modal>
+
+      <Modal open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)} title="Remove this material?"
+        description={confirmDelete ? `“${confirmDelete.name}” will be deleted from this course and storage. This can't be undone.` : ""}>
+        <div className="flex justify-end gap-2">
+          <button className="btn btn-ghost" onClick={() => setConfirmDelete(null)} disabled={remove.isPending}>Cancel</button>
+          <button className="btn bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={remove.isPending}
+            onClick={() => { if (confirmDelete) void removeMaterial(confirmDelete.id); }}>
+            {remove.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Remove
+          </button>
+        </div>
       </Modal>
     </div>
   );

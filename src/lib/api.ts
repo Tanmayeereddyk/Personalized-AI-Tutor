@@ -279,6 +279,7 @@ export const toMaterial = (dto: MaterialDto): Material => ({
   meta: dto.size_bytes ? `${(dto.size_bytes / 1024 / 1024).toFixed(1)} MB` : "—",
   added: `Added ${friendlyDate(dto.created_at)}`,
   status: (dto.status as Material["status"]) ?? "ready",
+  mimeType: dto.mime_type ?? undefined,
 });
 
 export const toNote = (dto: NoteDto): Note => ({
@@ -287,6 +288,7 @@ export const toNote = (dto: NoteDto): Note => ({
   title: dto.title,
   updated: friendlyDate(dto.updated_at),
   topics: dto.topics ?? [],
+  content: dto.content ?? undefined,
 });
 
 export const toQuiz = (dto: QuizDto): Quiz => ({
@@ -397,6 +399,20 @@ export const api = {
     async get(id: string): Promise<Course> {
       return toCourse(await request<CourseDto>(`/api/courses/${id}`));
     },
+    async update(
+      id: string,
+      input: {
+        name: string;
+        code: string;
+        description?: string | undefined;
+        color: string;
+        icon: string;
+      },
+    ): Promise<Course> {
+      return toCourse(
+        await request<CourseDto>(`/api/courses/${id}`, { method: "PUT", body: input }),
+      );
+    },
     async remove(id: string): Promise<void> {
       await request(`/api/courses/${id}`, { method: "DELETE" });
     },
@@ -431,7 +447,7 @@ export const api = {
       const dto = await request<QuizDto[]>(`/api/courses/${courseId}/quizzes`);
       return dto.map(toQuiz);
     },
-    async create(courseId: string, input: { name: string; topic?: string; difficulty: string; score?: number; total?: number }): Promise<Quiz> {
+    async create(courseId: string, input: { name: string; topic?: string | undefined; difficulty: string; score?: number; total?: number }): Promise<Quiz> {
       return toQuiz(await request<QuizDto>(`/api/courses/${courseId}/quizzes`, { method: "POST", body: input }));
     },
   },
@@ -440,11 +456,20 @@ export const api = {
       const dto = await request<DeckDto[]>(`/api/courses/${courseId}/flashcard-decks`);
       return dto.map(toDeck);
     },
+    async create(courseId: string, input: { topic: string; card_count?: number }): Promise<FlashcardDeck> {
+      return toDeck(await request<DeckDto>(`/api/courses/${courseId}/flashcard-decks`, { method: "POST", body: input }));
+    },
   },
   assessments: {
     async list(courseId: string): Promise<Assessment[]> {
       const dto = await request<AssessmentDto[]>(`/api/courses/${courseId}/assessments`);
       return dto.map(toAssessment);
+    },
+    async create(
+      courseId: string,
+      input: { name: string; topics?: string[]; score?: number; total?: number; duration_minutes?: number },
+    ): Promise<Assessment> {
+      return toAssessment(await request<AssessmentDto>(`/api/courses/${courseId}/assessments`, { method: "POST", body: input }));
     },
   },
 

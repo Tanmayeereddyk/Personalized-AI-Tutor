@@ -1,20 +1,48 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { ClipboardList, Plus, Timer, CalendarDays } from "lucide-react";
-import { useAssessments } from "@/lib/queries";
+import { ClipboardList, Plus, Timer, CalendarDays, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useAssessments, useCreateAssessment } from "@/lib/queries";
 import { EmptyState, Modal, PageHeader, ProgressBar, masteryTone } from "@/components/ui/kit";
-import { scoreTone } from "@/components/practice/Builder";
+import { Field, scoreTone } from "@/components/practice/Builder";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/courses/$courseId/assessments")({
   component: Assessments,
 });
 
+const blankAssessment = { name: "", topics: "", score: "0", total: "0", duration: "0" };
+
 function Assessments() {
   const { courseId } = Route.useParams();
   const assessments = useAssessments(courseId);
+  const create = useCreateAssessment(courseId);
   const list = assessments.data ?? [];
   const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(blankAssessment);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      toast.error("Give the assessment a name.");
+      return;
+    }
+    const topics = form.topics.split(",").map((t) => t.trim()).filter(Boolean);
+    try {
+      await create.mutateAsync({
+        name: form.name.trim(),
+        topics,
+        score: Math.max(0, Number(form.score) || 0),
+        total: Math.max(0, Number(form.total) || 0),
+        duration_minutes: Math.max(0, Number(form.duration) || 0),
+      });
+      toast.success("Assessment saved.");
+      setForm(blankAssessment);
+      setOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save the assessment.");
+    }
+  };
 
   return (
     <div>
@@ -30,8 +58,8 @@ function Assessments() {
           <button className="btn btn-primary mt-5" onClick={() => assessments.refetch()}>Try again</button>
         </div>
       ) : list.length === 0 ? (
-        <EmptyState icon={ClipboardList} title="No assessments yet" body="Assessment generation isn't available yet, so no mock exams have been created. They'll appear here once it is."
-          action={<button className="btn btn-primary" onClick={() => setOpen(true)}>About assessments</button>} />
+        <EmptyState icon={ClipboardList} title="No assessments yet" body="Record a mock exam to track your score across topics."
+          action={<button className="btn btn-primary" onClick={() => setOpen(true)}>Create Assessment</button>} />
       ) : (
         <div className="space-y-4">
           {list.map((a, i) => (
@@ -57,15 +85,32 @@ function Assessments() {
         </div>
       )}
 
-      <Modal open={open} onOpenChange={setOpen} title="Create Assessment" description="A timed, multi-topic mock exam.">
-        <div className="flex flex-col items-center py-8 text-center">
-          <ClipboardList className="h-12 w-12 text-muted-foreground" />
-          <h3 className="mt-4 text-lg font-medium">Assessment generation isn't available yet</h3>
-          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            This feature will assemble a timed mock exam from your course topics. It isn't enabled yet, so no assessment is created.
-          </p>
-          <button className="btn btn-primary mt-6" onClick={() => setOpen(false)}>Got it</button>
-        </div>
+      <Modal open={open} onOpenChange={setOpen} title="Create Assessment" description="Log a timed, multi-topic mock exam for this course.">
+        <form onSubmit={submit} className="space-y-4">
+          <Field label="Assessment name">
+            <input className="field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Midterm Mock" autoFocus />
+          </Field>
+          <Field label="Topics (comma-separated)">
+            <input className="field" value={form.topics} onChange={(e) => setForm({ ...form, topics: e.target.value })} placeholder="e.g. Recursion, Sorting, Graphs" />
+          </Field>
+          <div className="grid grid-cols-3 gap-4">
+            <Field label="Score">
+              <input type="number" min={0} className="field" value={form.score} onChange={(e) => setForm({ ...form, score: e.target.value })} />
+            </Field>
+            <Field label="Total">
+              <input type="number" min={0} className="field" value={form.total} onChange={(e) => setForm({ ...form, total: e.target.value })} />
+            </Field>
+            <Field label="Duration (min)">
+              <input type="number" min={0} className="field" value={form.duration} onChange={(e) => setForm({ ...form, duration: e.target.value })} />
+            </Field>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)} disabled={create.isPending}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={create.isPending}>
+              {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}Save assessment
+            </button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

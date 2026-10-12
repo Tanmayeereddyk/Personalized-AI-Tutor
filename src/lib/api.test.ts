@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, api, clearToken, getToken, toCourse, toEvent } from "./api";
+import { ApiError, api, clearToken, getToken, toCourse, toEvent, toMaterial, toNote } from "./api";
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -55,6 +55,71 @@ describe("dto mapping", () => {
       description: "Chapters 1-3",
     });
   });
+
+  it("maps a material row, surfacing its mime type", () => {
+    const material = toMaterial({
+      id: "m1",
+      user_id: "u1",
+      course_id: "c1",
+      name: "slides.pdf",
+      type: "pdf",
+      kind: "Document",
+      size_bytes: 1048576,
+      mime_type: "application/pdf",
+      storage_path: "c1/m1.pdf",
+      status: "ready",
+      created_at: null,
+      updated_at: null,
+    });
+    expect(material).toMatchObject({
+      id: "m1",
+      courseId: "c1",
+      type: "pdf",
+      meta: "1.0 MB",
+      status: "ready",
+      mimeType: "application/pdf",
+    });
+  });
+
+  it("maps a material row with no mime type to an absent mimeType", () => {
+    const material = toMaterial({
+      id: "m2",
+      user_id: "u1",
+      course_id: "c1",
+      name: "video.mp4",
+      type: "video",
+      kind: "Video",
+      size_bytes: null,
+      mime_type: null,
+      storage_path: null,
+      status: "processing",
+      created_at: null,
+      updated_at: null,
+    });
+    expect(material).toMatchObject({ id: "m2", type: "video", status: "processing" });
+    expect("mimeType" in material).toBe(true);
+    expect(material.mimeType).toBeUndefined();
+  });
+
+  it("maps a note row, retaining its body content", () => {
+    const note = toNote({
+      id: "n1",
+      user_id: "u1",
+      course_id: "c1",
+      title: "Graphs summary",
+      content: "Adjacency lists…",
+      topics: ["Graphs"],
+      created_at: null,
+      updated_at: "2026-10-12T09:00:00Z",
+    });
+    expect(note).toMatchObject({
+      id: "n1",
+      courseId: "c1",
+      title: "Graphs summary",
+      content: "Adjacency lists…",
+      topics: ["Graphs"],
+    });
+  });
 });
 
 describe("api client identity handling", () => {
@@ -93,6 +158,103 @@ describe("api client identity handling", () => {
 
     const [, init] = fetchMock.mock.calls[0]!;
     expect((init?.headers as Record<string, string>)["Authorization"]).toBe("Bearer tok-abc");
+  });
+
+  it("updates a course with PUT and maps the response", async () => {
+    localStorage.setItem("studyai.token", "tok-abc");
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse({
+        id: "c1",
+        user_id: "u1",
+        name: "New name",
+        code: "NEW",
+        description: null,
+        color: "sky",
+        icon: "atom",
+        created_at: null,
+        updated_at: null,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const course = await api.courses.update("c1", {
+      name: "New name",
+      code: "NEW",
+      color: "sky",
+      icon: "atom",
+    });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toContain("/api/courses/c1");
+    expect(init?.method).toBe("PUT");
+    expect(JSON.parse(init?.body as string)).toMatchObject({
+      name: "New name",
+      code: "NEW",
+      color: "sky",
+      icon: "atom",
+    });
+    expect(course).toMatchObject({ id: "c1", name: "New name", code: "NEW", color: "sky", icon: "atom" });
+  });
+
+  it("creates a flashcard deck with POST and maps the response", async () => {
+    localStorage.setItem("studyai.token", "tok-abc");
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse({
+        id: "d1",
+        user_id: "u1",
+        course_id: "c1",
+        topic: "Graphs",
+        card_count: 12,
+        created_at: null,
+        updated_at: null,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const deck = await api.decks.create("c1", { topic: "Graphs", card_count: 12 });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toContain("/api/courses/c1/flashcard-decks");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toMatchObject({ topic: "Graphs", card_count: 12 });
+    expect(deck).toMatchObject({ id: "d1", courseId: "c1", topic: "Graphs", cards: 12 });
+  });
+
+  it("creates an assessment with POST including topics", async () => {
+    localStorage.setItem("studyai.token", "tok-abc");
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse({
+        id: "a1",
+        user_id: "u1",
+        course_id: "c1",
+        name: "Midterm Mock",
+        topics: ["Recursion", "Graphs"],
+        score: 18,
+        total: 20,
+        duration_minutes: 45,
+        created_at: null,
+        updated_at: null,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const assessment = await api.assessments.create("c1", {
+      name: "Midterm Mock",
+      topics: ["Recursion", "Graphs"],
+      score: 18,
+      total: 20,
+      duration_minutes: 45,
+    });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toContain("/api/courses/c1/assessments");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toMatchObject({
+      name: "Midterm Mock",
+      topics: ["Recursion", "Graphs"],
+      duration_minutes: 45,
+    });
+    expect(assessment).toMatchObject({ id: "a1", courseId: "c1", name: "Midterm Mock", duration: "45 min" });
   });
 
   it("clears the token and surfaces the server message on 401", async () => {

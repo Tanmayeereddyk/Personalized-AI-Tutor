@@ -47,6 +47,7 @@ function Notes() {
                 <span className="text-xs text-muted-foreground">Updated {n.updated}</span>
               </div>
               <h3 className="mt-4 text-lg font-medium">{n.title}</h3>
+              {n.content ? <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm text-muted-foreground">{n.content}</p> : null}
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {n.topics.map((t) => <span key={t} className="chip">{t}</span>)}
               </div>

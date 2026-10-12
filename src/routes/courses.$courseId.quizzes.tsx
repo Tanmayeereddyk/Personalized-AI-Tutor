@@ -1,20 +1,47 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { ListChecks, Plus, Sparkles } from "lucide-react";
-import { useQuizzes } from "@/lib/queries";
+import { ListChecks, Plus, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useCreateQuiz, useQuizzes } from "@/lib/queries";
 import { EmptyState, Modal, PageHeader } from "@/components/ui/kit";
-import { scoreBorder, scoreTone } from "@/components/practice/Builder";
+import { Field, PillGroup, scoreBorder, scoreTone } from "@/components/practice/Builder";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/courses/$courseId/quizzes")({
   component: Quizzes,
 });
 
+const blankQuiz = { name: "", topic: "", difficulty: "Medium", score: "0", total: "0" };
+
 function Quizzes() {
   const { courseId } = Route.useParams();
   const quizzes = useQuizzes(courseId);
+  const create = useCreateQuiz(courseId);
   const list = quizzes.data ?? [];
   const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(blankQuiz);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      toast.error("Give the quiz a name.");
+      return;
+    }
+    try {
+      await create.mutateAsync({
+        name: form.name.trim(),
+        topic: form.topic.trim() || undefined,
+        difficulty: form.difficulty,
+        score: Math.max(0, Number(form.score) || 0),
+        total: Math.max(0, Number(form.total) || 0),
+      });
+      toast.success("Quiz attempt saved.");
+      setForm(blankQuiz);
+      setOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save the quiz.");
+    }
+  };
 
   return (
     <div>
@@ -30,8 +57,8 @@ function Quizzes() {
           <button className="btn btn-primary mt-5" onClick={() => quizzes.refetch()}>Try again</button>
         </div>
       ) : list.length === 0 ? (
-        <EmptyState icon={ListChecks} title="No quizzes attempted yet." body="Quiz generation isn't available yet, so there are no attempts to show. Your results will appear here once it is."
-          action={<button className="btn btn-primary" onClick={() => setOpen(true)}>About quizzes</button>} />
+        <EmptyState icon={ListChecks} title="No quizzes attempted yet." body="Record a quiz attempt to track your score and spot weak spots."
+          action={<button className="btn btn-primary" onClick={() => setOpen(true)}>Create Quiz</button>} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {list.map((q, i) => {
@@ -54,15 +81,32 @@ function Quizzes() {
         </div>
       )}
 
-      <Modal open={open} onOpenChange={setOpen} title="Create a Quiz" description="Quizzes are generated from this course's materials.">
-        <div className="flex flex-col items-center py-8 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-primary"><Sparkles className="h-6 w-6" /></span>
-          <h3 className="mt-4 text-lg font-medium">Quiz generation isn't available yet</h3>
-          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            This feature will build practice questions from your uploaded materials. It isn't enabled yet, so no quiz is created.
-          </p>
-          <button className="btn btn-primary mt-6" onClick={() => setOpen(false)}>Got it</button>
-        </div>
+      <Modal open={open} onOpenChange={setOpen} title="Record a Quiz" description="Log a quiz attempt for this course.">
+        <form onSubmit={submit} className="space-y-4">
+          <Field label="Quiz name">
+            <input className="field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Sorting Algorithms" autoFocus />
+          </Field>
+          <Field label="Topic (optional)">
+            <input className="field" value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })} placeholder="e.g. Recursion" />
+          </Field>
+          <Field label="Difficulty">
+            <PillGroup options={["Easy", "Medium", "Hard"]} value={form.difficulty} onChange={(v) => setForm({ ...form, difficulty: v })} />
+          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Score">
+              <input type="number" min={0} className="field" value={form.score} onChange={(e) => setForm({ ...form, score: e.target.value })} />
+            </Field>
+            <Field label="Total questions">
+              <input type="number" min={0} className="field" value={form.total} onChange={(e) => setForm({ ...form, total: e.target.value })} />
+            </Field>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)} disabled={create.isPending}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={create.isPending}>
+              {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}Save quiz
+            </button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

@@ -1,22 +1,43 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Layers, Plus, Sparkles } from "lucide-react";
-import { useFlashcardDecks } from "@/lib/queries";
+import { Layers, Plus, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useCreateDeck, useFlashcardDecks } from "@/lib/queries";
 import { EmptyState, Modal, PageHeader } from "@/components/ui/kit";
+import { Field } from "@/components/practice/Builder";
 
 export const Route = createFileRoute("/courses/$courseId/flashcards")({
   component: Flashcards,
 });
 
+const blankDeck = { topic: "", card_count: "0" };
+
 function Flashcards() {
   const { courseId } = Route.useParams();
   const decks = useFlashcardDecks(courseId);
+  const create = useCreateDeck(courseId);
   const list = decks.data ?? [];
   const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(blankDeck);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await create.mutateAsync({
+        topic: form.topic.trim() || "General",
+        card_count: Math.max(0, Number(form.card_count) || 0),
+      });
+      toast.success("Flashcard deck created.");
+      setForm(blankDeck);
+      setOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create the deck.");
+    }
+  };
 
   return (
     <div>
-      <PageHeader title="Flashcards" subtitle="Spaced-repetition decks generated from your materials."
+      <PageHeader title="Flashcards" subtitle="Spaced-repetition decks for your course topics."
         action={<button className="btn btn-primary" onClick={() => setOpen(true)}><Plus className="h-4 w-4" />Create Flashcards</button>} />
 
       {decks.isLoading ? (
@@ -28,8 +49,8 @@ function Flashcards() {
           <button className="btn btn-primary mt-5" onClick={() => decks.refetch()}>Try again</button>
         </div>
       ) : list.length === 0 ? (
-        <EmptyState icon={Layers} title="No flashcard decks yet" body="Deck generation isn't available yet, so no decks have been created. They'll appear here once it is."
-          action={<button className="btn btn-primary" onClick={() => setOpen(true)}>About flashcards</button>} />
+        <EmptyState icon={Layers} title="No flashcard decks yet" body="Create a deck for a topic to start tracking your flashcards."
+          action={<button className="btn btn-primary" onClick={() => setOpen(true)}>Create Flashcards</button>} />
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {list.map((d, i) => (
@@ -47,15 +68,21 @@ function Flashcards() {
         </div>
       )}
 
-      <Modal open={open} onOpenChange={setOpen} title="Create Flashcards">
-        <div className="flex flex-col items-center py-8 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-primary"><Sparkles className="h-6 w-6" /></span>
-          <h3 className="mt-4 text-lg font-medium">Flashcard generation isn't available yet</h3>
-          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            This feature will build spaced-repetition decks from your materials. It isn't enabled yet, so no deck is created.
-          </p>
-          <button className="btn btn-primary mt-6" onClick={() => setOpen(false)}>Got it</button>
-        </div>
+      <Modal open={open} onOpenChange={setOpen} title="Create Flashcards" description="Add a deck for a topic in this course.">
+        <form onSubmit={submit} className="space-y-4">
+          <Field label="Topic">
+            <input className="field" value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })} placeholder="e.g. Graph Theory" autoFocus />
+          </Field>
+          <Field label="Number of cards (optional)">
+            <input type="number" min={0} className="field" value={form.card_count} onChange={(e) => setForm({ ...form, card_count: e.target.value })} />
+          </Field>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)} disabled={create.isPending}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={create.isPending}>
+              {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}Create deck
+            </button>
+          </div>
+        </form>
       </Modal>
     </div>
   );
