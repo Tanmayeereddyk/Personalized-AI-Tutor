@@ -25,6 +25,16 @@ def get_service_supabase() -> Client:
     return supabase_db.get_service_client()
 
 
+def get_recovery_supabase() -> Client:
+    """A dedicated anonymous client for password recovery.
+
+    Recovery temporarily sets a session on the client, so it must not be the
+    shared client used by the rest of the app. Kept as a dependency so tests
+    can swap in the fake Supabase client.
+    """
+    return supabase_db.create_anon_client()
+
+
 def get_access_token(authorization: str | None = Header(default=None)) -> str:
     """Extract the JWT from `Authorization: Bearer <token>`.
 

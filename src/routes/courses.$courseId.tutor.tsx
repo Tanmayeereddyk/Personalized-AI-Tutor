@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCourse } from "@/lib/store";
-import { TutorUnavailable } from "@/components/practice/TutorUnavailable";
+
+import { TutorWorkspace } from "@/components/tutor/TutorWorkspace";
 
 export const Route = createFileRoute("/courses/$courseId/tutor")({
   component: Tutor,
@@ -8,11 +8,5 @@ export const Route = createFileRoute("/courses/$courseId/tutor")({
 
 function Tutor() {
   const { courseId } = Route.useParams();
-  const course = useCourse(courseId);
-
-  return (
-    <div className="h-[calc(100vh-22rem)] min-h-[480px]">
-      <TutorUnavailable courseCode={course?.code} courseId={courseId} className="card h-full" />
-    </div>
-  );
+  return <TutorWorkspace courseId={courseId} />;
 }

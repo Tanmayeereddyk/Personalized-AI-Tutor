@@ -10,14 +10,17 @@ from supabase import Client
 from app.api.dependencies import (
     get_access_token,
     get_current_user,
+    get_recovery_supabase,
     get_service_supabase,
     get_supabase,
 )
 from app.schemas.auth import (
     AuthUser,
+    ForgotPasswordRequest,
     LoginRequest,
     MeResponse,
     MessageResponse,
+    ResetPasswordRequest,
     SessionResponse,
     SignupRequest,
     SignupResponse,
@@ -63,3 +66,26 @@ def logout(
 ) -> MessageResponse:
     """Validate the token, then revoke it at Supabase (401 if invalid)."""
     return auth_service.logout(anon_client, admin_client, token)
+
+
+@router.post("/api/auth/forgot-password", response_model=MessageResponse)
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    anon_client: Client = Depends(get_supabase),
+) -> MessageResponse:
+    """Email a password-reset link (always reports success, to avoid leaks)."""
+    return auth_service.request_password_reset(anon_client, payload)
+
+
+@router.post("/api/auth/reset-password", response_model=MessageResponse)
+def reset_password(
+    payload: ResetPasswordRequest,
+    recovery_client: Client = Depends(get_recovery_supabase),
+    anon_client: Client = Depends(get_supabase),
+) -> MessageResponse:
+    """Set a new password using the token from the recovery email link.
+
+    Requires a valid recovery session (the access token from the link);
+    otherwise it returns 401.
+    """
+    return auth_service.reset_password(recovery_client, anon_client, payload)

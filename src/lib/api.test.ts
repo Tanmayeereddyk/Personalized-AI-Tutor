@@ -269,3 +269,67 @@ describe("api client identity handling", () => {
     expect(getToken()).toBeNull();
   });
 });
+
+describe("password recovery", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts to forgot-password without a bearer token", async () => {
+    localStorage.setItem("studyai.token", "tok-should-not-be-sent");
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse({ message: "If an account exists…" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.auth.forgotPassword("ada@example.com");
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toMatch(/\/api\/auth\/forgot-password$/);
+    expect(init?.method).toBe("POST");
+    expect((init?.headers as Record<string, string>)["Authorization"]).toBeUndefined();
+    expect(JSON.parse(String(init?.body))).toEqual({ email: "ada@example.com" });
+  });
+
+  it("sends the recovery tokens and new password to reset-password", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse({ message: "ok" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const message = await api.auth.resetPassword({
+      accessToken: "access-1",
+      refreshToken: "refresh-1",
+      newPassword: "newpassword456",
+    });
+
+    expect(message).toBe("ok");
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toMatch(/\/api\/auth\/reset-password$/);
+    expect(JSON.parse(String(init?.body))).toEqual({
+      access_token: "access-1",
+      refresh_token: "refresh-1",
+      new_password: "newpassword456",
+    });
+  });
+
+  it("omits the refresh token when it is not available", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse({ message: "ok" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.auth.resetPassword({ accessToken: "access-1", newPassword: "newpassword456" });
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(JSON.parse(String(init?.body))).toEqual({
+      access_token: "access-1",
+      refresh_token: null,
+      new_password: "newpassword456",
+    });
+  });
+});

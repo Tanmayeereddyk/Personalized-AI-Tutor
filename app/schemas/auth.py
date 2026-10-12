@@ -22,6 +22,30 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class ForgotPasswordRequest(BaseModel):
+    """Body for POST /api/auth/forgot-password.
+
+    Only the email is needed. The endpoint always reports success so it
+    can never be used to discover which addresses have an account.
+    """
+
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """Body for POST /api/auth/reset-password.
+
+    `access_token` (and `refresh_token`) come from the recovery link that
+    Supabase emails; they prove the user actually followed that link. The
+    new password follows the same rule as signup (at least 8 characters)
+    and is sent straight to Supabase Auth, never stored by our app.
+    """
+
+    access_token: str = Field(min_length=1)
+    refresh_token: str | None = Field(default=None, max_length=4096)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class AuthUser(BaseModel):
     """The authenticated user (validated from a Bearer token)."""
 
