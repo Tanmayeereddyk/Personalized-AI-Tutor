@@ -1,17 +1,17 @@
 # Web framework + server
-fastapi
-uvicorn[standard]
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
 
 # Data validation (used by FastAPI, listed explicitly)
-pydantic
-email-validator          # required by pydantic EmailStr (auth schemas)
+pydantic==2.14.0
+email-validator==2.3.0          # required by pydantic EmailStr (auth schemas)
 
 # Load .env files
-python-dotenv
+python-dotenv==1.2.4
 
 # Supabase client (Part 2: database + auth)
-supabase
+supabase==2.32.0
 
 # Testing
-pytest
-httpx
+pytest==9.1.1
+httpx==0.28.1
