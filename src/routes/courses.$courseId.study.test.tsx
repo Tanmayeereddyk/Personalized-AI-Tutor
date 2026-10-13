@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { LayoutProvider } from "@/lib/layout";
 import { StudyWorkspace } from "./courses.$courseId.study";
 
 vi.mock("@tanstack/react-router", () => {
@@ -166,5 +167,23 @@ describe("study workspace layouts", () => {
     fireEvent.click(screen.getByTitle("Notes + Tutor"));
 
     expect(window.localStorage.getItem("studyai.study.mode")).toBe("notes-tutor");
+  });
+
+  it("opens the workspace as a full screen page and closes it", async () => {
+    render(
+      <LayoutProvider>
+        <StudyWorkspace />
+      </LayoutProvider>,
+    );
+    await screen.findByText("Private · link expires");
+
+    expect(screen.queryByLabelText("Close full screen")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Full screen"));
+    expect(screen.getByLabelText("Close full screen")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Close full screen"));
+    expect(screen.queryByLabelText("Close full screen")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Full screen")).toBeInTheDocument();
   });
 });

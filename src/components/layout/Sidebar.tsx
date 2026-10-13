@@ -1,6 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Check, ChevronsUpDown, CalendarDays, LayoutGrid, Library, LogOut, Monitor, Moon, Plus, Settings, Sparkles, Sun, User } from "lucide-react";
+import { Check, ChevronsUpDown, CalendarDays, LayoutGrid, Library, LogOut, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles, Sun, User } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useTheme, type ThemePreference } from "@/lib/theme";
@@ -19,8 +19,17 @@ const themeOptions: { value: ThemePreference; label: string; icon: typeof Sun }[
   { value: "system", label: "System", icon: Monitor },
 ];
 
-/** compact = icon-only rail (tablet). */
-export function Sidebar({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
+/** compact = icon-only rail (tablet, or collapsed by the user). */
+export function Sidebar({
+  compact = false,
+  onNavigate,
+  onToggleCollapsed,
+}: {
+  compact?: boolean;
+  onNavigate?: () => void;
+  /** When provided, shows the collapse/expand control (large screens only). */
+  onToggleCollapsed?: (() => void) | undefined;
+}) {
   const { courses, user, setAddCourseOpen } = useStore();
   const { logout } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -40,11 +49,25 @@ export function Sidebar({ compact = false, onNavigate }: { compact?: boolean; on
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
-      <div className={cn("flex items-center gap-2.5 px-4 py-5", compact && "justify-center px-0")}>
+      <div className={cn("flex items-center gap-2.5 px-4 py-5", compact && "flex-col gap-2 px-0")}>
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-[0_0_24px_-4px] shadow-primary/60">
           <Sparkles className="h-4 w-4" />
         </span>
         {!compact && <span className="text-[15px] font-semibold tracking-tight">Lumio</span>}
+        {onToggleCollapsed && (
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
+            title={compact ? "Expand sidebar" : "Collapse sidebar"}
+            className={cn(
+              "rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
+              !compact && "ml-auto",
+            )}
+          >
+            {compact ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
+        )}
       </div>
 
       <nav className="space-y-0.5 px-3">

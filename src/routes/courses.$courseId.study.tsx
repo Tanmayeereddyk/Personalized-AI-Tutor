@@ -11,6 +11,8 @@ import {
   GripVertical,
   Layers,
   Loader2,
+  Maximize2,
+  Minimize2,
   NotebookPen,
   RefreshCw,
   Sparkles,
@@ -19,6 +21,8 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useExtractionStatus, useGenerateNotes, useMaterials, useTranscript } from "@/lib/queries";
 import { useCourse } from "@/lib/store";
+import { useLayout } from "@/lib/layout";
+import { FullScreenPage } from "@/components/layout/FullScreenPage";
 import { EmptyState } from "@/components/ui/kit";
 import { AudioTranscript } from "@/components/materials/AudioTranscript";
 import { CourseTutor } from "@/components/tutor/CourseTutor";
@@ -132,7 +136,12 @@ export function StudyWorkspace() {
   const [mode, setMode] = useState<StudyMode>(readMode);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
+  const { focus, toggleFocus, setFocus } = useLayout();
   const generate = useGenerateNotes(courseId);
+
+  // Leaving the page always closes full screen, so its state never leaks to
+  // another route.
+  useEffect(() => () => setFocus(false), [setFocus]);
 
   useEffect(() => {
     try {
@@ -209,6 +218,28 @@ export function StudyWorkspace() {
     }
   };
 
+  /** The study workspace, shared by the inline and full screen renders. */
+  const workspace = fallback ? (
+    <WorkspaceLayout
+      material={fallback}
+      course={course}
+      courseId={courseId}
+      session={session}
+      url={url}
+      urlState={urlState}
+      onRetry={refreshUrl}
+      onDownload={download}
+      mode={mode}
+      focus={focus}
+      selectedNoteId={selectedNoteId}
+      onSelectNote={setSelectedNoteId}
+      onBack={() => setSelectedNoteId(null)}
+      onGenerateNotes={generateNotes}
+      generating={generate.isPending}
+      onOpenMaterial={switchMaterial}
+    />
+  ) : null;
+
   return (
     <div>
       <Toolbar
@@ -266,30 +297,25 @@ export function StudyWorkspace() {
             Open first material
           </button>
         </div>
-      ) : (
-        fallback && (
-          <>
-            <ViewModeBar mode={mode} onChange={setMode} />
-            <WorkspaceLayout
-              material={fallback}
-              course={course}
-              courseId={courseId}
-              session={session}
-              url={url}
-              urlState={urlState}
-              onRetry={refreshUrl}
-              onDownload={download}
+      ) : fallback ? (
+        focus ? (
+          <FullScreenPage title={fallback.name} onClose={toggleFocus}>
+            <ViewModeBar
               mode={mode}
-              selectedNoteId={selectedNoteId}
-              onSelectNote={setSelectedNoteId}
-              onBack={() => setSelectedNoteId(null)}
-              onGenerateNotes={generateNotes}
-              generating={generate.isPending}
-              onOpenMaterial={switchMaterial}
+              onChange={setMode}
+              focus={focus}
+              onToggleFocus={toggleFocus}
+              showFocusControl={false}
             />
+            {workspace}
+          </FullScreenPage>
+        ) : (
+          <>
+            <ViewModeBar mode={mode} onChange={setMode} focus={focus} onToggleFocus={toggleFocus} />
+            {workspace}
           </>
         )
-      )}
+      ) : null}
     </div>
   );
 }
@@ -366,7 +392,19 @@ function Toolbar({
 }
 
 /** Visible control for the four workspace layouts. */
-function ViewModeBar({ mode, onChange }: { mode: StudyMode; onChange: (mode: StudyMode) => void }) {
+function ViewModeBar({
+  mode,
+  onChange,
+  focus,
+  onToggleFocus,
+  showFocusControl = true,
+}: {
+  mode: StudyMode;
+  onChange: (mode: StudyMode) => void;
+  focus: boolean;
+  onToggleFocus: () => void;
+  showFocusControl?: boolean;
+}) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
       <span className="hidden text-xs font-medium uppercase tracking-wider text-muted-foreground sm:inline">
@@ -399,6 +437,23 @@ function ViewModeBar({ mode, onChange }: { mode: StudyMode; onChange: (mode: Stu
           );
         })}
       </div>
+
+      {showFocusControl && (
+        <button
+          type="button"
+          onClick={onToggleFocus}
+          aria-pressed={focus}
+          aria-label={focus ? "Exit full screen" : "Full screen"}
+          title={focus ? "Exit full screen" : "Expand the workspace to the full screen"}
+          className={cn(
+            "btn btn-ghost ml-auto px-2.5 py-1.5 text-xs",
+            focus ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
+          {focus ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          <span className="hidden sm:inline">{focus ? "Exit full screen" : "Full screen"}</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -434,6 +489,7 @@ function Split({
   primaryMin,
   secondaryMin,
   defaultPrimary,
+  heightClass,
   primary,
   secondary,
 }: {
@@ -443,6 +499,7 @@ function Split({
   primaryMin: number;
   secondaryMin: number;
   defaultPrimary: number;
+  heightClass: string;
   primary: ReactNode;
   secondary: ReactNode;
 }) {
@@ -463,7 +520,7 @@ function Split({
       key={mode}
       id={`study-${mode}`}
       orientation="horizontal"
-      className="h-[calc(100dvh-22rem)] min-h-[560px]"
+      className={heightClass}
       defaultLayout={initial}
       onLayoutChanged={(layout) => saveLayout(mode, layout)}
     >
@@ -488,6 +545,7 @@ function WorkspaceLayout({
   onRetry,
   onDownload,
   mode,
+  focus,
   selectedNoteId,
   onSelectNote,
   onBack,
@@ -504,6 +562,7 @@ function WorkspaceLayout({
   onRetry: () => void;
   onDownload: () => void;
   mode: StudyMode;
+  focus: boolean;
   selectedNoteId: string | null;
   onSelectNote: (id: string) => void;
   onBack: () => void;
@@ -512,6 +571,8 @@ function WorkspaceLayout({
   onOpenMaterial: (id: string) => void;
 }) {
   const isDesktop = useMediaQuery("(min-width: 900px)");
+  // Full screen fills the overlay; otherwise the workspace is a viewport slice.
+  const heightClass = focus ? "min-h-0 flex-1" : "h-[calc(100dvh-22rem)] min-h-[560px]";
 
   const materialPanel = (
     <Reader
@@ -566,7 +627,7 @@ function WorkspaceLayout({
   }
 
   if (mode === "notes") {
-    return <div className="h-[calc(100dvh-22rem)] min-h-[560px]">{notesPanel}</div>;
+    return <div className={heightClass}>{notesPanel}</div>;
   }
 
   if (mode === "notes-tutor") {
@@ -578,6 +639,7 @@ function WorkspaceLayout({
         primaryMin={NOTES_MIN}
         secondaryMin={TUTOR_MIN}
         defaultPrimary={60}
+        heightClass={heightClass}
         primary={notesPanel}
         secondary={tutorPanel}
       />
@@ -593,6 +655,7 @@ function WorkspaceLayout({
         primaryMin={MATERIAL_MIN}
         secondaryMin={TUTOR_MIN}
         defaultPrimary={60}
+        heightClass={heightClass}
         primary={materialPanel}
         secondary={tutorPanel}
       />
@@ -607,6 +670,7 @@ function WorkspaceLayout({
       primaryMin={MATERIAL_MIN}
       secondaryMin={NOTES_MIN}
       defaultPrimary={58}
+      heightClass={heightClass}
       primary={materialPanel}
       secondary={notesPanel}
     />

@@ -12,7 +12,10 @@ import type {
   Citation,
   CitationKind,
   Course,
+  ExtractedUnit,
+  ExtractionStatus,
   Flashcard, FlashcardDeck,
+  IndexStatus,
   Material,
   MaterialChunk,
   Note,
@@ -735,7 +738,7 @@ export const api = {
     },
     async create(input: {
       name: string;
-      code: string;
+      code?: string | undefined;
       description?: string | undefined;
       color: string;
       icon: string;
@@ -749,7 +752,7 @@ export const api = {
       id: string,
       input: {
         name: string;
-        code: string;
+        code?: string | undefined;
         description?: string | undefined;
         color: string;
         icon: string;

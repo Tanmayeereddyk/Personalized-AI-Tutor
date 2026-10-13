@@ -20,6 +20,7 @@ import {
 } from "@/lib/queries";
 import { useCourse } from "@/lib/store";
 import type { Material } from "@/lib/types";
+import { NOTES_PHASE_LABEL, type NotesPhase } from "@/lib/notes-generation";
 import { StudySurface } from "@/components/study/StudySurface";
 import { useStoredStudyView } from "@/lib/study-view";
 import { EmptyState, Modal, PageHeader } from "@/components/ui/kit";
@@ -67,6 +68,7 @@ export function Materials() {
   const [recent, setRecent] = useState<string[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [phase, setPhase] = useState<NotesPhase | null>(null);
   const [view, setView] = useStoredStudyView("studyai.materials.view", "split");
   const input = useRef<HTMLInputElement>(null);
 
@@ -105,12 +107,15 @@ export function Materials() {
 
   const generateNotes = async () => {
     if (!selected) return;
+    setPhase(null);
     try {
-      await generate.mutateAsync({ materialId: selected.id });
+      await generate.mutateAsync({ materialId: selected.id, onPhase: setPhase });
       setSelectedNoteId(null);
       toast.success("Notes generated from this material.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't generate notes.");
+    } finally {
+      setPhase(null);
     }
   };
 
@@ -197,7 +202,11 @@ export function Materials() {
                 ) : (
                   <NotebookPen className="h-4 w-4" />
                 )}
-                Generate notes
+                {generate.isPending
+                  ? phase
+                    ? NOTES_PHASE_LABEL[phase]
+                    : "Generating…"
+                  : "Generate notes"}
               </button>
               <button
                 className="btn btn-ghost text-destructive"
@@ -209,6 +218,12 @@ export function Materials() {
               </button>
             </div>
           </div>
+
+          {generate.isPending ? (
+            <p role="status" aria-live="polite" className="mb-4 text-sm text-muted-foreground">
+              {phase ? NOTES_PHASE_LABEL[phase] : "Generating…"}
+            </p>
+          ) : null}
 
           <StudySurface
             courseId={courseId}

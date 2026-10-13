@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "./api";
 import { useAuth } from "./auth";
+import { generateNotesWithProgress, type NotesPhase } from "./notes-generation";
 
 export const useMaterials = (courseId: string) => {
   const { user } = useAuth();
@@ -138,10 +139,24 @@ export const useGenerateNotes = (courseId: string) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { materialId?: string | undefined; noteId?: string | undefined } = {}) =>
-      api.notes.generate(courseId, input),
+    // One action performs any missing prerequisites (extraction, indexing) and
+    // then writes the notes — see src/lib/notes-generation.ts. `onPhase` lets
+    // the caller show the live progress state.
+    mutationFn: (
+      input: {
+        materialId?: string | undefined;
+        noteId?: string | undefined;
+        onPhase?: ((phase: NotesPhase) => void) | undefined;
+      } = {},
+    ) =>
+      generateNotesWithProgress(
+        { courseId, materialId: input.materialId, noteId: input.noteId },
+        input.onPhase ?? (() => {}),
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notes", user?.id, courseId] });
+      queryClient.invalidateQueries({ queryKey: ["materials", user?.id, courseId] });
+      queryClient.invalidateQueries({ queryKey: ["index-status", user?.id] });
     },
   });
 };

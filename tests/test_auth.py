@@ -4,6 +4,8 @@ Everything runs against the fake Supabase client from conftest.py —
 no real Supabase account or keys are required.
 """
 
+from types import SimpleNamespace
+
 import pytest
 from pydantic import ValidationError
 from supabase import AuthApiError, PostgrestAPIError
@@ -16,6 +18,7 @@ from app.schemas.auth import (
     SessionResponse,
     SignupRequest,
 )
+from app.services.auth_service import _session_response
 from tests.conftest import create_user
 
 AUTH_PATHS = {
@@ -515,6 +518,32 @@ def test_reset_password_when_supabase_rejects_update_is_400(client, fake_supabas
 def test_session_response_defaults_to_bearer() -> None:
     session = SessionResponse(access_token="abc", user=AuthUser(id="u1", email="a@b.co"))
     assert session.token_type == "bearer"
+
+
+def test_session_response_helper_builds_from_supabase_result() -> None:
+    """Regression: login/refresh build their reply through _session_response.
+
+    That private helper was accidentally dropped while resolving a merge, so
+    both endpoints raised `NameError: name '_session_response' is not defined`.
+    Cover it directly to keep the helper from silently disappearing again.
+    """
+    result = SimpleNamespace(
+        session=SimpleNamespace(
+            access_token="token-1",
+            refresh_token="refresh-1",
+            token_type="bearer",
+        ),
+        user=SimpleNamespace(id="u1", email="a@b.co"),
+    )
+
+    response = _session_response(result)
+
+    assert isinstance(response, SessionResponse)
+    assert response.access_token == "token-1"
+    assert response.refresh_token == "refresh-1"
+    assert response.token_type == "bearer"
+    assert response.user.id == "u1"
+    assert response.user.email == "a@b.co"
 
 
 def test_signup_request_requires_strong_password() -> None:

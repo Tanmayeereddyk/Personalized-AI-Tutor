@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Material } from "@/lib/types";
+import { LayoutProvider } from "@/lib/layout";
 import { StudySurface, type StudySurfaceProps } from "./StudySurface";
 
 /**
@@ -171,5 +172,32 @@ describe("StudySurface", () => {
 
     fireEvent.click(screen.getByLabelText("Show tutor panel"));
     expect(screen.getByText("Explain dynamic programming")).toBeInTheDocument();
+  });
+
+  it("opens a full screen page and closes it with the close control", () => {
+    render(
+      <LayoutProvider>
+        <StudySurface
+          courseId="c1"
+          courseCode="DAA"
+          material={pdfMaterial}
+          view="split"
+          onViewChange={() => {}}
+          selectedNoteId={null}
+          onSelectNote={() => {}}
+          onBack={() => {}}
+        />
+      </LayoutProvider>,
+    );
+
+    expect(screen.queryByLabelText("Close full screen")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Full screen"));
+    expect(screen.getByRole("dialog", { name: "Full screen workspace" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Close full screen")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Close full screen"));
+    expect(screen.queryByLabelText("Close full screen")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Full screen")).toBeInTheDocument();
   });
 });
