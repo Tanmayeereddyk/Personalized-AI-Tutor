@@ -94,27 +94,6 @@ export const useCreateDeck = (courseId: string) => {
   });
 };
 
-export const useAssessments = (courseId: string) => {
-  const { user } = useAuth();
-  return useQuery({
-    queryKey: ["assessments", user?.id, courseId],
-    queryFn: () => api.assessments.list(courseId),
-    enabled: !!user && !!courseId,
-  });
-};
-
-export const useCreateAssessment = (courseId: string) => {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { name: string; topics?: string[]; score?: number; total?: number; duration_minutes?: number }) =>
-      api.assessments.create(courseId, input),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["assessments", user?.id, courseId] });
-    },
-  });
-};
-
 export const useFlashcards = (deckId: string) => {
   const { user } = useAuth();
   return useQuery({

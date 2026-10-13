@@ -220,43 +220,6 @@ describe("api client identity handling", () => {
     expect(deck).toMatchObject({ id: "d1", courseId: "c1", topic: "Graphs", cards: 12 });
   });
 
-  it("creates an assessment with POST including topics", async () => {
-    localStorage.setItem("studyai.token", "tok-abc");
-    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
-      jsonResponse({
-        id: "a1",
-        user_id: "u1",
-        course_id: "c1",
-        name: "Midterm Mock",
-        topics: ["Recursion", "Graphs"],
-        score: 18,
-        total: 20,
-        duration_minutes: 45,
-        created_at: null,
-        updated_at: null,
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const assessment = await api.assessments.create("c1", {
-      name: "Midterm Mock",
-      topics: ["Recursion", "Graphs"],
-      score: 18,
-      total: 20,
-      duration_minutes: 45,
-    });
-
-    const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toContain("/api/courses/c1/assessments");
-    expect(init?.method).toBe("POST");
-    expect(JSON.parse(init?.body as string)).toMatchObject({
-      name: "Midterm Mock",
-      topics: ["Recursion", "Graphs"],
-      duration_minutes: 45,
-    });
-    expect(assessment).toMatchObject({ id: "a1", courseId: "c1", name: "Midterm Mock", duration: "45 min" });
-  });
-
   it("clears the token and surfaces the server message on 401", async () => {
     localStorage.setItem("studyai.token", "tok-expired");
     vi.stubGlobal(

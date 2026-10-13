@@ -8,7 +8,6 @@
  */
 
 import type {
-  Assessment,
   CalendarEvent,
   Course,
   Flashcard, FlashcardDeck,
@@ -213,19 +212,6 @@ interface FlashcardDto {
   updated_at: string | null;
 }
 
-interface AssessmentDto {
-  id: string;
-  user_id: string;
-  course_id: string;
-  name: string;
-  topics: string[];
-  score: number;
-  total: number;
-  duration_minutes: number;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
 interface EventDto {
   id: string;
   user_id: string;
@@ -328,17 +314,6 @@ export const toFlashcard = (dto: FlashcardDto): Flashcard => ({
   back: dto.back,
   createdAt: dto.created_at ?? '',
   courseId: undefined,
-});
-
-export const toAssessment = (dto: AssessmentDto): Assessment => ({
-  id: dto.id,
-  courseId: dto.course_id,
-  name: dto.name,
-  topics: dto.topics ?? [],
-  score: dto.score,
-  total: dto.total,
-  date: friendlyDate(dto.created_at),
-  duration: dto.duration_minutes ? `${dto.duration_minutes} min` : "—",
 });
 
 export const toEvent = (dto: EventDto): CalendarEvent => ({
@@ -524,19 +499,6 @@ export const api = {
     },
     async remove(id: string): Promise<void> {
       await request(`/api/flashcards/${id}`, { method: "DELETE" });
-    },
-  },
-
-  assessments: {
-    async list(courseId: string): Promise<Assessment[]> {
-      const dto = await request<AssessmentDto[]>(`/api/courses/${courseId}/assessments`);
-      return dto.map(toAssessment);
-    },
-    async create(
-      courseId: string,
-      input: { name: string; topics?: string[]; score?: number; total?: number; duration_minutes?: number },
-    ): Promise<Assessment> {
-      return toAssessment(await request<AssessmentDto>(`/api/courses/${courseId}/assessments`, { method: "POST", body: input }));
     },
   },
 

@@ -5,8 +5,7 @@ token, never from the request body) and adds ``.eq("user_id", user_id)``
 to the query. A record that belongs to somebody else simply does not
 match, so it is reported as 404 — the same as a record that does not
 exist. This is the single place the ownership rule is implemented, so
-notes, quizzes, decks, assessments, events and bookmarks all behave the
-same way.
+notes, quizzes, decks, events and bookmarks all behave the same way.
 """
 
 from fastapi import HTTPException

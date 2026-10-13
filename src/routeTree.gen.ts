@@ -20,7 +20,6 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as CoursesIndexRouteImport } from './routes/courses.index'
 import { Route as CoursesCourseIdRouteImport } from './routes/courses.$courseId'
 import { Route as CoursesCourseIdIndexRouteImport } from './routes/courses.$courseId.index'
-import { Route as CoursesCourseIdAssessmentsRouteImport } from './routes/courses.$courseId.assessments'
 import { Route as CoursesCourseIdFlashcardsRouteImport } from './routes/courses.$courseId.flashcards'
 import { Route as CoursesCourseIdMaterialsRouteImport } from './routes/courses.$courseId.materials'
 import { Route as CoursesCourseIdNotesRouteImport } from './routes/courses.$courseId.notes'
@@ -84,12 +83,6 @@ const CoursesCourseIdIndexRoute = CoursesCourseIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => CoursesCourseIdRoute,
 } as any)
-const CoursesCourseIdAssessmentsRoute =
-  CoursesCourseIdAssessmentsRouteImport.update({
-    id: '/assessments',
-    path: '/assessments',
-    getParentRoute: () => CoursesCourseIdRoute,
-  } as any)
 const CoursesCourseIdFlashcardsRoute =
   CoursesCourseIdFlashcardsRouteImport.update({
     id: '/flashcards',
@@ -139,7 +132,6 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/courses/$courseId': typeof CoursesCourseIdRouteWithChildren
   '/courses/': typeof CoursesIndexRoute
-  '/courses/$courseId/assessments': typeof CoursesCourseIdAssessmentsRoute
   '/courses/$courseId/flashcards': typeof CoursesCourseIdFlashcardsRoute
   '/courses/$courseId/materials': typeof CoursesCourseIdMaterialsRoute
   '/courses/$courseId/notes': typeof CoursesCourseIdNotesRoute
@@ -159,7 +151,6 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/courses': typeof CoursesIndexRoute
-  '/courses/$courseId/assessments': typeof CoursesCourseIdAssessmentsRoute
   '/courses/$courseId/flashcards': typeof CoursesCourseIdFlashcardsRoute
   '/courses/$courseId/materials': typeof CoursesCourseIdMaterialsRoute
   '/courses/$courseId/notes': typeof CoursesCourseIdNotesRoute
@@ -181,7 +172,6 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/courses/$courseId': typeof CoursesCourseIdRouteWithChildren
   '/courses/': typeof CoursesIndexRoute
-  '/courses/$courseId/assessments': typeof CoursesCourseIdAssessmentsRoute
   '/courses/$courseId/flashcards': typeof CoursesCourseIdFlashcardsRoute
   '/courses/$courseId/materials': typeof CoursesCourseIdMaterialsRoute
   '/courses/$courseId/notes': typeof CoursesCourseIdNotesRoute
@@ -204,7 +194,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/courses/$courseId'
     | '/courses/'
-    | '/courses/$courseId/assessments'
     | '/courses/$courseId/flashcards'
     | '/courses/$courseId/materials'
     | '/courses/$courseId/notes'
@@ -224,7 +213,6 @@ export interface FileRouteTypes {
     | '/settings'
     | '/signup'
     | '/courses'
-    | '/courses/$courseId/assessments'
     | '/courses/$courseId/flashcards'
     | '/courses/$courseId/materials'
     | '/courses/$courseId/notes'
@@ -245,7 +233,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/courses/$courseId'
     | '/courses/'
-    | '/courses/$courseId/assessments'
     | '/courses/$courseId/flashcards'
     | '/courses/$courseId/materials'
     | '/courses/$courseId/notes'
@@ -348,13 +335,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CoursesCourseIdIndexRouteImport
       parentRoute: typeof CoursesCourseIdRoute
     }
-    '/courses/$courseId/assessments': {
-      id: '/courses/$courseId/assessments'
-      path: '/assessments'
-      fullPath: '/courses/$courseId/assessments'
-      preLoaderRoute: typeof CoursesCourseIdAssessmentsRouteImport
-      parentRoute: typeof CoursesCourseIdRoute
-    }
     '/courses/$courseId/flashcards': {
       id: '/courses/$courseId/flashcards'
       path: '/flashcards'
@@ -408,7 +388,6 @@ declare module '@tanstack/react-router' {
 }
 
 interface CoursesCourseIdRouteChildren {
-  CoursesCourseIdAssessmentsRoute: typeof CoursesCourseIdAssessmentsRoute
   CoursesCourseIdFlashcardsRoute: typeof CoursesCourseIdFlashcardsRoute
   CoursesCourseIdMaterialsRoute: typeof CoursesCourseIdMaterialsRoute
   CoursesCourseIdNotesRoute: typeof CoursesCourseIdNotesRoute
@@ -420,7 +399,6 @@ interface CoursesCourseIdRouteChildren {
 }
 
 const CoursesCourseIdRouteChildren: CoursesCourseIdRouteChildren = {
-  CoursesCourseIdAssessmentsRoute: CoursesCourseIdAssessmentsRoute,
   CoursesCourseIdFlashcardsRoute: CoursesCourseIdFlashcardsRoute,
   CoursesCourseIdMaterialsRoute: CoursesCourseIdMaterialsRoute,
   CoursesCourseIdNotesRoute: CoursesCourseIdNotesRoute,

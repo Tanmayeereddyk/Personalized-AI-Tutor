@@ -26,7 +26,6 @@ const tabs = [
   { to: "/courses/$courseId/notes", label: "Notes" },
   { to: "/courses/$courseId/quizzes", label: "Quizzes" },
   { to: "/courses/$courseId/flashcards", label: "Flashcards" },
-  { to: "/courses/$courseId/assessments", label: "Assessments" },
 ] as const;
 
 function CourseLayout() {

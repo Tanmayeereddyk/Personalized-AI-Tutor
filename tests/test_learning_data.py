@@ -1,7 +1,7 @@
 """Ownership tests for materials and per-user learning data.
 
 The security property: every resource (materials, notes, quizzes,
-flashcard decks, assessments, calendar events, bookmarks) is scoped to
+flashcard decks, calendar events, bookmarks) is scoped to
 the authenticated user. A second user must never be able to list, read,
 update or delete the first user's rows — even when a record id is known.
 """
@@ -23,7 +23,6 @@ COURSE_SCOPED = [
     ("notes", {"title": "Chapter 1"}),
     ("quizzes", {"name": "Warm-up"}),
     ("flashcard-decks", {"topic": "Photosynthesis"}),
-    ("assessments", {"name": "Midterm"}),
 ]
 
 USER_SCOPED = [
@@ -47,8 +46,6 @@ def test_new_routes_registered() -> None:
         "/api/quizzes/{item_id}",
         "/api/courses/{course_id}/flashcard-decks",
         "/api/flashcard-decks/{item_id}",
-        "/api/courses/{course_id}/assessments",
-        "/api/assessments/{item_id}",
         "/api/calendar-events",
         "/api/calendar-events/{item_id}",
         "/api/bookmarks",
@@ -157,7 +154,7 @@ def test_delete_material_removes_file_and_row(client, fake_supabase, logged_in_u
 
 
 # ---------------------------------------------------------------
-# Course-scoped learning resources (notes/quizzes/decks/assessments)
+# Course-scoped learning resources (notes/quizzes/decks)
 # ---------------------------------------------------------------
 @pytest.mark.parametrize(("segment", "body"), COURSE_SCOPED)
 def test_course_scoped_crud(client, logged_in_user, segment, body) -> None:

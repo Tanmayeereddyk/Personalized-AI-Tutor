@@ -1,11 +1,11 @@
-"""Per-user learning data: notes, quizzes, decks, assessments, events, bookmarks.
+"""Per-user learning data: notes, quizzes, decks, events, bookmarks.
 
 Each resource is exposed through a small router built from the shared
 ownership-safe CRUD in ``app.services.owned_service``. Because every
 query filters by the authenticated user id, two different users can never
 see or modify each other's rows — even when they know a record id.
 
-Course-scoped resources (notes, quizzes, decks, assessments) live under
+Course-scoped resources (notes, quizzes, decks) live under
 ``/api/courses/<course_id>/<segment>`` so creating one also checks that
 the course belongs to the caller. Personal resources (calendar events,
 bookmarks) live at ``/api/<segment>``.
@@ -17,9 +17,6 @@ from supabase import Client
 from app.api.dependencies import get_current_user, get_service_supabase
 from app.schemas.auth import AuthUser
 from app.schemas.learning import (
-    AssessmentCreate,
-    AssessmentResponse,
-    AssessmentUpdate,
     BookmarkCreate,
     BookmarkResponse,
     BookmarkUpdate,
@@ -199,10 +196,6 @@ quizzes_router = _course_scoped_router(
 decks_router = _course_scoped_router(
     table="flashcard_decks", tag="flashcard-decks", segment="flashcard-decks",
     create_model=DeckCreate, update_model=DeckUpdate, response_model=DeckResponse,
-)
-assessments_router = _course_scoped_router(
-    table="assessments", tag="assessments", segment="assessments",
-    create_model=AssessmentCreate, update_model=AssessmentUpdate, response_model=AssessmentResponse,
 )
 events_router = _user_scoped_router(
     table="calendar_events", tag="calendar-events", segment="calendar-events",

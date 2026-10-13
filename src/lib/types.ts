@@ -53,10 +53,6 @@ export interface Flashcard {
   courseId?: string | undefined;
 }
 
-export interface Assessment {
-  id: string; courseId: string; name: string; topics: string[]; score: number; total: number; date: string; duration: string;
-}
-
 export type EventKind = "quiz" | "assessment" | "study" | "reminder";
 export interface CalendarEvent { id: string; date: string; title: string; kind?: EventKind | undefined; courseId?: string | undefined; startTime?: string | undefined; endTime?: string | undefined; description?: string | undefined }
 
