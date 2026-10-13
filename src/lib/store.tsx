@@ -22,10 +22,16 @@ export interface StoreUser {
 
 export interface CourseInput {
   name: string;
-  code: string;
+  code?: string | undefined;
   description?: string | undefined;
   color: CourseColor;
   icon: CourseIcon;
+}
+
+/** Course codes are optional — when omitted the backend derives one from the name. */
+function normalizeCode(code: string | undefined): string | undefined {
+  const trimmed = code?.trim();
+  return trimmed ? trimmed.toUpperCase() : undefined;
 }
 
 interface Store {
@@ -76,7 +82,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     createCourse: async (input) => {
       const course = await api.courses.create({
         name: input.name,
-        code: input.code.toUpperCase(),
+        code: normalizeCode(input.code),
         description: input.description,
         color: input.color,
         icon: input.icon,
@@ -87,7 +93,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updateCourse: async (id, input) => {
       const course = await api.courses.update(id, {
         name: input.name,
-        code: input.code.toUpperCase(),
+        code: normalizeCode(input.code),
         description: input.description,
         color: input.color,
         icon: input.icon,

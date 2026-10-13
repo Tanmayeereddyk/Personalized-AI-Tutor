@@ -25,6 +25,7 @@ function CourseForm({
   error,
   onSubmit,
   onCancel,
+  showCode = true,
 }: {
   initial?: CourseFormValues;
   submitLabel: string;
@@ -32,6 +33,7 @@ function CourseForm({
   error: string | null;
   onSubmit: (values: CourseFormValues) => void;
   onCancel: () => void;
+  showCode?: boolean;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [code, setCode] = useState(initial?.code ?? "");
@@ -41,7 +43,7 @@ function CourseForm({
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !code.trim() || saving) return;
+    if (!name.trim() || saving) return;
     onSubmit({
       name: name.trim(),
       code: code.trim().toUpperCase(),
@@ -58,10 +60,12 @@ function CourseForm({
         <Label>Course name</Label>
         <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Design & Analysis of Algorithms" autoFocus />
       </div>
-      <div>
-        <Label>Course code</Label>
-        <input className="field" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. CSE201" />
-      </div>
+      {showCode && (
+        <div>
+          <Label>Course code</Label>
+          <input className="field" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. CSE201 (optional)" />
+        </div>
+      )}
       <div>
         <Label>Description</Label>
         <textarea className="field min-h-20 resize-none" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
@@ -93,7 +97,7 @@ function CourseForm({
       </div>
       <div className="flex justify-end gap-2 pt-2">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancel</button>
-        <button type="submit" className="btn btn-primary" disabled={!name.trim() || !code.trim() || saving}>
+        <button type="submit" className="btn btn-primary" disabled={!name.trim() || saving}>
           {saving && <Loader2 className="h-4 w-4 animate-spin" />}{submitLabel}
         </button>
       </div>
@@ -132,7 +136,7 @@ export function AddCourseModal() {
 
   return (
     <Modal open={addCourseOpen} onOpenChange={setAddCourseOpen} title="Add a new course" description="Set up a space for your materials, notes and practice.">
-      <CourseForm submitLabel="Create Course" saving={saving} error={error} onSubmit={submit} onCancel={() => setAddCourseOpen(false)} />
+      <CourseForm submitLabel="Create Course" saving={saving} error={error} onSubmit={submit} onCancel={() => setAddCourseOpen(false)} showCode={false} />
     </Modal>
   );
 }

@@ -9,11 +9,12 @@ plus focused unit tests for chunking and for the ownership/deletion rules.
 import re
 import threading
 import time
+import uuid
 
 import fitz  # PyMuPDF — installed in this environment
 
 from app.core.config import settings
-from app.services import embeddings, llm_service, notes_pdf, rag_service
+from app.services import embeddings, extraction_service, llm_service, notes_pdf, rag_service
 
 PHOTOSYNTHESIS = (
     "Photosynthesis converts light energy into chemical energy. "
@@ -81,6 +82,42 @@ def _make_indexed_material(client, headers, course_id: str, pages: list[str]) ->
     )
     _extract(client, headers, material["id"])
     return material
+
+
+def _seed_material(
+    fake,
+    user_id: str,
+    course_id: str,
+    name: str,
+    data: bytes,
+    *,
+    material_type: str = "pdf",
+    mime: str = "application/pdf",
+) -> str:
+    """Insert a material row + stored file that has never been processed.
+
+    The upload route queues extraction as a background task (which TestClient
+    runs inline), so this bypasses the route to reproduce a material whose
+    extraction never ran — the exact "Run extraction first" situation.
+    """
+    material_id = str(uuid.uuid4())
+    storage_path = f"{user_id}/{course_id}/{material_id}/{name}"
+    fake.stored_objects[f"materials/{storage_path}"] = data
+    fake.tables.setdefault("materials", []).append(
+        {
+            "id": material_id,
+            "user_id": user_id,
+            "course_id": course_id,
+            "name": name,
+            "type": material_type,
+            "kind": "Document",
+            "size_bytes": len(data),
+            "mime_type": mime,
+            "storage_path": storage_path,
+            "status": "ready",
+        }
+    )
+    return material_id
 
 
 # ----------------------------------------------------------------------
@@ -356,6 +393,135 @@ def test_generate_notes_for_a_course_indexes_missing_materials(
     )
     assert response.status_code == 201, response.text
     assert response.json()["generated"] is True
+
+
+def test_generate_notes_extracts_a_never_processed_material(client, fake_supabase) -> None:
+    """A single Generate click extracts + indexes a material that never ran.
+
+    This is the reported dead-end ("Run extraction first, then generate notes"):
+    the material exists but has no extracted content yet, and generation must
+    run the real extraction pipeline itself before writing the notes.
+    """
+    headers = _signup(client, "alice@example.com")
+    course = _create_course(client, headers)
+    user_id = next(iter(fake_supabase.auth.users))
+    material_id = _seed_material(
+        fake_supabase, user_id, course["id"], "biology.pdf",
+        _pdf_bytes([PHOTOSYNTHESIS, RESPIRATION]),
+    )
+
+    before = client.get(
+        f"/api/materials/{material_id}/index-status", headers=headers
+    ).json()
+    assert before["indexed"] is False
+    assert before["unit_count"] == 0
+
+    response = client.post(
+        f"/api/courses/{course['id']}/notes/generate",
+        json={"material_id": material_id},
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    note = response.json()
+    assert note["generated"] is True
+    assert note["generation_method"] == "llm"
+    assert "chlorophyll" in note["content"]
+    assert note["source_material_ids"] == [material_id]
+    assert note["source_refs"]  # page references survive into the notes
+
+    # The Generate action really extracted and indexed the material.
+    units = client.get(
+        f"/api/materials/{material_id}/extracted-units", headers=headers
+    ).json()
+    assert len(units) >= 2
+    after = client.get(
+        f"/api/materials/{material_id}/index-status", headers=headers
+    ).json()
+    assert after["indexed"] is True
+    assert after["chunk_count"] >= 2
+
+    # It is persisted and can be reopened without regenerating.
+    assert client.get(f"/api/notes/{note['id']}", headers=headers).status_code == 200
+
+
+def test_generate_notes_for_a_course_also_extracts_an_unprocessed_material(
+    client, fake_supabase
+) -> None:
+    """Course-wide generation prepares *every* in-scope material, not just some."""
+    headers = _signup(client, "alice@example.com")
+    course = _create_course(client, headers)
+    indexed = _make_indexed_material(client, headers, course["id"], [PHOTOSYNTHESIS])
+    user_id = next(iter(fake_supabase.auth.users))
+    missing = _seed_material(
+        fake_supabase, user_id, course["id"], "respiration.pdf",
+        _pdf_bytes([RESPIRATION]),
+    )
+
+    note = client.post(
+        f"/api/courses/{course['id']}/notes/generate", json={}, headers=headers
+    ).json()
+
+    assert note["generated"] is True
+    assert set(note["source_material_ids"]) == {indexed["id"], missing}
+    assert client.get(
+        f"/api/materials/{missing}/index-status", headers=headers
+    ).json()["indexed"] is True
+
+
+def test_generate_notes_explains_an_unsupported_material(client, fake_supabase) -> None:
+    """Nothing extractable yields the real, actionable warning — never mock notes."""
+    headers = _signup(client, "alice@example.com")
+    course = _create_course(client, headers)
+    user_id = next(iter(fake_supabase.auth.users))
+    material_id = _seed_material(
+        fake_supabase, user_id, course["id"], "handout.docx", b"not extractable",
+        material_type="doc", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+    response = client.post(
+        f"/api/courses/{course['id']}/notes/generate",
+        json={"material_id": material_id},
+        headers=headers,
+    )
+    assert response.status_code == 400, response.text
+    detail = response.json()["detail"].lower()
+    assert "not implemented" in detail  # the real extractor warning
+    assert "index" in detail
+
+
+def test_repeated_generate_clicks_do_not_duplicate_notes_or_chunks(
+    client, fake_supabase
+) -> None:
+    """Regenerating the same scope refreshes one note and never doubles chunks."""
+    headers = _signup(client, "alice@example.com")
+    course = _create_course(client, headers)
+    user_id = next(iter(fake_supabase.auth.users))
+    material_id = _seed_material(
+        fake_supabase, user_id, course["id"], "biology.pdf",
+        _pdf_bytes([PHOTOSYNTHESIS, RESPIRATION]),
+    )
+
+    first = client.post(
+        f"/api/courses/{course['id']}/notes/generate",
+        json={"material_id": material_id},
+        headers=headers,
+    ).json()
+    chunks_after_first = len(fake_supabase.tables["rag_chunks"])
+
+    second = client.post(
+        f"/api/courses/{course['id']}/notes/generate",
+        json={"material_id": material_id},
+        headers=headers,
+    ).json()
+
+    assert first["id"] == second["id"]
+    assert len(
+        client.get(f"/api/courses/{course['id']}/notes", headers=headers).json()
+    ) == 1
+    assert len(fake_supabase.tables["rag_chunks"]) == chunks_after_first
+    assert len(
+        client.get(f"/api/materials/{material_id}/extracted-units", headers=headers).json()
+    ) >= 2
 
 
 def test_index_status_reports_missing_store_without_failing(

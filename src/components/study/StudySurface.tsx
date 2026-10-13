@@ -1,19 +1,23 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import {
   BookOpen,
   GripVertical,
   Layers,
+  Maximize2,
   Mic,
+  Minimize2,
   NotebookPen,
   PanelRightClose,
   PanelRightOpen,
 } from "lucide-react";
 
 import { MaterialViewer } from "@/components/materials/MaterialViewer";
+import { FullScreenPage } from "@/components/layout/FullScreenPage";
 import { NotesPanel } from "@/components/tutor/NotesPanel";
 import { TutorChat } from "@/components/tutor/TutorChat";
 import { useTutorChat } from "@/components/tutor/useTutorChat";
+import { useLayout } from "@/lib/layout";
 import { useTranscript } from "@/lib/queries";
 import { useMediaQuery } from "@/lib/use-media-query";
 import type { Material } from "@/lib/types";
@@ -38,6 +42,8 @@ const MATERIAL_MIN = 320; // px
 const NOTES_MIN = 300; // px
 const TUTOR_MIN = 320; // px
 const SURFACE_HEIGHT = "h-[calc(100dvh-22rem)] min-h-[560px]";
+// Full screen (focus) fills the overlay instead of a measured viewport slice.
+const SURFACE_HEIGHT_FOCUS = "min-h-0 flex-1";
 
 function readStoredLayout(storageKey: string): Record<string, number> | undefined {
   if (typeof window === "undefined") return undefined;
@@ -69,12 +75,18 @@ function ViewToolbar({
   options,
   tutorOpen,
   onToggleTutor,
+  focus,
+  onToggleFocus,
+  showFocusControl = true,
 }: {
   view: StudyView;
   onChange: (view: StudyView) => void;
   options: ViewOption[];
   tutorOpen: boolean;
   onToggleTutor: () => void;
+  focus: boolean;
+  onToggleFocus: () => void;
+  showFocusControl?: boolean;
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -108,24 +120,43 @@ function ViewToolbar({
         })}
       </div>
 
-      <button
-        type="button"
-        onClick={onToggleTutor}
-        aria-pressed={tutorOpen}
-        aria-label={tutorOpen ? "Hide tutor panel" : "Show tutor panel"}
-        title={tutorOpen ? "Collapse the tutor panel" : "Open the tutor panel"}
-        className={cn(
-          "btn btn-ghost ml-auto px-2.5 py-1.5 text-xs",
-          tutorOpen ? "text-foreground" : "text-muted-foreground",
+      <div className="ml-auto flex items-center gap-2">
+        {showFocusControl && (
+          <button
+            type="button"
+            onClick={onToggleFocus}
+            aria-pressed={focus}
+            aria-label={focus ? "Exit full screen" : "Full screen"}
+            title={focus ? "Exit full screen" : "Expand the workspace to the full screen"}
+            className={cn(
+              "btn btn-ghost px-2.5 py-1.5 text-xs",
+              focus ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
+            {focus ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            <span className="hidden sm:inline">{focus ? "Exit full screen" : "Full screen"}</span>
+          </button>
         )}
-      >
-        {tutorOpen ? (
-          <PanelRightClose className="h-4 w-4" />
-        ) : (
-          <PanelRightOpen className="h-4 w-4" />
-        )}
-        <span className="hidden sm:inline">{tutorOpen ? "Hide tutor" : "Show tutor"}</span>
-      </button>
+
+        <button
+          type="button"
+          onClick={onToggleTutor}
+          aria-pressed={tutorOpen}
+          aria-label={tutorOpen ? "Hide tutor panel" : "Show tutor panel"}
+          title={tutorOpen ? "Collapse the tutor panel" : "Open the tutor panel"}
+          className={cn(
+            "btn btn-ghost px-2.5 py-1.5 text-xs",
+            tutorOpen ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
+          {tutorOpen ? (
+            <PanelRightClose className="h-4 w-4" />
+          ) : (
+            <PanelRightOpen className="h-4 w-4" />
+          )}
+          <span className="hidden sm:inline">{tutorOpen ? "Hide tutor" : "Show tutor"}</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -185,6 +216,12 @@ export function StudySurface({
   const [draft, setDraft] = useState("");
   const [tutorOpen, setTutorOpen] = useState(true);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const { focus, toggleFocus, setFocus } = useLayout();
+  const surfaceHeight = focus ? SURFACE_HEIGHT_FOCUS : SURFACE_HEIGHT;
+
+  // Leaving the page always closes full screen, so its state never leaks to
+  // another route.
+  useEffect(() => () => setFocus(false), [setFocus]);
 
   // A transcript only exists for video/audio material that has been transcribed.
   const isVideo = material?.type === "video";
@@ -320,12 +357,17 @@ export function StudySurface({
       options={options}
       tutorOpen={tutorOpen}
       onToggleTutor={() => setTutorOpen((open) => !open)}
+      focus={focus}
+      onToggleFocus={toggleFocus}
+      showFocusControl={!focus}
     />
   );
 
+  const title = material ? material.name : "Study workspace";
+
   if (!isDesktop) {
     // Compact stacked layout: each pane scrolls on its own and stays reachable.
-    return (
+    const stacked = (
       <div>
         {toolbar}
         <div className="space-y-4">
@@ -338,6 +380,15 @@ export function StudySurface({
         </div>
       </div>
     );
+
+    if (focus) {
+      return (
+        <FullScreenPage title={title} onClose={toggleFocus}>
+          <div className="min-h-0 flex-1 overflow-auto">{stacked}</div>
+        </FullScreenPage>
+      );
+    }
+    return stacked;
   }
 
   const elements: ReactNode[] = [];
@@ -360,19 +411,32 @@ export function StudySurface({
     );
   }
 
+  const group = (
+    <Group
+      key={groupKey}
+      id={`study-surface-${groupKey}`}
+      orientation="horizontal"
+      className={surfaceHeight}
+      defaultLayout={defaultLayout}
+      onLayoutChanged={saveLayout}
+    >
+      {elements}
+    </Group>
+  );
+
+  if (focus) {
+    return (
+      <FullScreenPage title={title} onClose={toggleFocus}>
+        {toolbar}
+        {group}
+      </FullScreenPage>
+    );
+  }
+
   return (
     <div>
       {toolbar}
-      <Group
-        key={groupKey}
-        id={`study-surface-${groupKey}`}
-        orientation="horizontal"
-        className={SURFACE_HEIGHT}
-        defaultLayout={defaultLayout}
-        onLayoutChanged={saveLayout}
-      >
-        {elements}
-      </Group>
+      {group}
     </div>
   );
 }

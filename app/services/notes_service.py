@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -32,10 +33,30 @@ from app.services import (
     citations,
     embeddings,
     extracted_unit_service,
+    extraction_service,
     llm_service,
     owned_service,
     rag_service,
 )
+
+# How long a Generate request will wait for an extraction that an upload already
+# started (a background task). A second extraction is never started while one is
+# running, because two concurrent ``replace_units`` / ``replace_chunks`` runs
+# could delete each other's freshly inserted rows.
+_PREPARE_WAIT_SECONDS = 180.0
+_PREPARE_POLL_SECONDS = 1.0
+
+# Process-local locks, one per (user, course, material) scope. Two identical
+# Generate requests (a double click, or two tabs) are serialized: the second
+# waits, then sees the first run's content/index and refreshes the same note
+# instead of duplicating extraction, chunks or notes.
+_SCOPE_LOCKS: dict[str, threading.Lock] = {}
+_SCOPE_LOCKS_GUARD = threading.Lock()
+
+
+def _scope_lock(key: str) -> threading.Lock:
+    with _SCOPE_LOCKS_GUARD:
+        return _SCOPE_LOCKS.setdefault(key, threading.Lock())
 
 logger = logging.getLogger("studyai.notes")
 
@@ -126,10 +147,38 @@ def _indexable_unit_count(client: Client, user_id: str, scope: list[str]) -> int
     return total
 
 
+def _extraction_problems(client: Client, user_id: str, scope: list[str]) -> list[str]:
+    """The real, actionable extraction warnings for in-scope materials.
+
+    Only materials that produced no *indexable* text are considered, so the
+    message a user sees is the actual reason (an unsupported format, an
+    unreadable file, a page with no text layer and no OCR, …) instead of a
+    generic "run extraction first".
+    """
+    problems: list[str] = []
+    for material_id in scope:
+        units = extracted_unit_service.list_units(client, user_id, material_id)
+        if rag_service.indexable_units(units):
+            continue  # this material really does have content
+        status = extraction_service.extraction_status(client, user_id, material_id)
+        for warning in status.get("warnings") or []:
+            if warning not in problems:
+                problems.append(warning)
+    return problems
+
+
 def _missing_content_detail(
     client: Client, user_id: str, scope: list[str], material_id: str | None
 ) -> str:
     """A precise, actionable message for the "nothing to build notes from" case."""
+    problems = _extraction_problems(client, user_id, scope)
+    if problems:
+        lead = (
+            "This material has no extractable text to index yet."
+            if material_id is not None
+            else "These materials have no extractable text to index yet."
+        )
+        return f"{lead} {' '.join(problems)}"
     if _indexable_unit_count(client, user_id, scope):
         return (
             "The extracted content could not be indexed. Re-run extraction, "
@@ -137,13 +186,59 @@ def _missing_content_detail(
         )
     if material_id is not None:
         return (
-            "This material has no extracted content to index yet. Run "
-            "extraction first, then generate notes."
+            "This material has no extractable text to index yet. Add a file with "
+            "readable text, slides or a soundtrack, then generate notes."
         )
     return (
-        "No indexed content yet — extract your materials and build their "
-        "index first, then generate notes."
+        "No indexed content yet — add materials with readable text, slides or a "
+        "soundtrack, then generate notes."
     )
+
+
+def _await_extraction(client: Client, user_id: str, material_id: str) -> dict:
+    """Wait (bounded) for a background extraction that is already running."""
+    deadline = time.monotonic() + _PREPARE_WAIT_SECONDS
+    status = extraction_service.extraction_status(client, user_id, material_id)
+    while status.get("status") == "processing" and time.monotonic() < deadline:
+        time.sleep(_PREPARE_POLL_SECONDS)
+        status = extraction_service.extraction_status(client, user_id, material_id)
+    return status
+
+
+def _prepare_materials(client: Client, user_id: str, scope: list[str]) -> None:
+    """Make every in-scope material extracted and indexed before note-writing.
+
+    This is the fix for the old "Run extraction first, then generate notes"
+    dead-end: the Generate action now performs any missing prerequisites itself,
+    server-side, reusing the real pipeline. ``extraction_service.run_extraction``
+    extracts PDFs (text + page info + images), PPT/PPTX (slide text + numbers +
+    images) and videos (Whisper transcript + timestamps + frames), and then
+    chunks + embeds + stores the result for retrieval.
+
+    It deliberately avoids duplicate work:
+    - an already-indexed material is left untouched;
+    - a material that was extracted but not indexed is indexed from its existing
+      units;
+    - a material whose extraction is *still running* is waited for (the upload
+      already queued it) instead of starting a second, racing run;
+    - only a material with nothing extractable yet (never extracted, or a
+      failed/empty earlier run) is extracted here, synchronously.
+    """
+    for material_id in scope:
+        if rag_service.ensure_material_indexed(client, user_id, material_id):
+            continue  # already indexed (this also indexes existing units)
+
+        status = extraction_service.extraction_status(client, user_id, material_id)
+        if status.get("status") == "processing":
+            _await_extraction(client, user_id, material_id)
+            if rag_service.ensure_material_indexed(client, user_id, material_id):
+                continue
+
+        # Nothing extractable yet: run the real pipeline, then index whatever it
+        # produced. Both steps are idempotent, so a retry never duplicates rows.
+        extraction_service.begin_extraction(client, user_id, material_id)
+        extraction_service.run_extraction(client, user_id, material_id)
+        rag_service.ensure_material_indexed(client, user_id, material_id)
 
 
 # ----------------------------------------------------------------------
@@ -293,7 +388,12 @@ def generate_notes(
     material_id: str | None = None,
     note_id: str | None = None,
 ) -> dict:
-    """Generate and persist source-grounded notes with the configured LLM."""
+    """Generate and persist source-grounded notes with the configured LLM.
+
+    The whole "make the scope ready, then write the notes" sequence runs behind
+    one call, so a single Generate action is enough: any missing extraction or
+    indexing is performed first (see :func:`_prepare_materials`).
+    """
     owned_service.ensure_course_owned(client, user_id, course_id)
     materials = _course_materials(client, user_id, course_id)
 
@@ -301,16 +401,36 @@ def generate_notes(
         raise HTTPException(status_code=404, detail="Material not found in this course")
 
     scope = [material_id] if material_id is not None else sorted(materials)
-    chunks = rag_service.list_chunks(client, user_id, course_id=course_id, material_id=material_id)
 
-    if not chunks and scope:
-        # The material was extracted but not indexed yet: build the index from
-        # the existing extracted units instead of failing.
-        for scope_id in scope:
-            rag_service.ensure_material_indexed(client, user_id, scope_id)
-        chunks = rag_service.list_chunks(
-            client, user_id, course_id=course_id, material_id=material_id
+    # Serialize identical requests (double clicks / two tabs): the second waits,
+    # then reuses the first run's content and refreshes the same note.
+    with _scope_lock(f"{user_id}:{course_id}:{material_id or '*'}"):
+        return _generate_notes(
+            client,
+            user_id,
+            course_id,
+            materials,
+            scope,
+            material_id=material_id,
+            note_id=note_id,
         )
+
+
+def _generate_notes(
+    client: Client,
+    user_id: str,
+    course_id: str,
+    materials: dict[str, dict],
+    scope: list[str],
+    *,
+    material_id: str | None,
+    note_id: str | None,
+) -> dict:
+    """The locked body of :func:`generate_notes` (ready the scope, then write)."""
+    if scope:
+        _prepare_materials(client, user_id, scope)
+
+    chunks = rag_service.list_chunks(client, user_id, course_id=course_id, material_id=material_id)
 
     if not chunks:
         raise HTTPException(

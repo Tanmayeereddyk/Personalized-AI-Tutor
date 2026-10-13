@@ -8,6 +8,7 @@ import { useStoredStudyView } from "@/lib/study-view";
 import { PageHeader } from "@/components/ui/kit";
 import { useGenerateNotes, useMaterials } from "@/lib/queries";
 import { useCourse } from "@/lib/store";
+import { NOTES_PHASE_LABEL, type NotesPhase } from "@/lib/notes-generation";
 
 export const Route = createFileRoute("/courses/$courseId/notes")({
   component: Notes,
@@ -22,19 +23,30 @@ export function Notes() {
   const list = materials.data ?? [];
   const [materialId, setMaterialId] = useState("");
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [phase, setPhase] = useState<NotesPhase | null>(null);
   const [view, setView] = useStoredStudyView("studyai.notes.view", "notes");
 
   const material = list.find((m) => m.id === materialId) ?? list[0];
 
   const generateNotes = async () => {
+    setPhase(null);
     try {
-      await generate.mutateAsync(materialId ? { materialId } : {});
+      await generate.mutateAsync({
+        materialId: materialId || undefined,
+        onPhase: setPhase,
+      });
       setSelectedNoteId(null);
       toast.success("Notes generated from your materials.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't generate notes.");
+    } finally {
+      setPhase(null);
     }
   };
+
+  const busyLabel = generate.isPending
+    ? (phase ? NOTES_PHASE_LABEL[phase] : "Generating…")
+    : "Generate Notes";
 
   return (
     <div>
@@ -59,18 +71,24 @@ export function Notes() {
             <button
               className="btn btn-primary"
               onClick={() => void generateNotes()}
-              disabled={generate.isPending}
+              disabled={generate.isPending || list.length === 0}
             >
               {generate.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Sparkles className="h-4 w-4" />
               )}
-              {generate.isPending ? "Generating…" : "Generate Notes"}
+              {busyLabel}
             </button>
           </div>
         }
       />
+
+      {generate.isPending ? (
+        <p role="status" aria-live="polite" className="mb-4 text-sm text-muted-foreground">
+          {phase ? NOTES_PHASE_LABEL[phase] : "Generating…"}
+        </p>
+      ) : null}
 
       {generate.error ? (
         <p className="mb-4 text-sm text-destructive">{(generate.error as Error).message}</p>
