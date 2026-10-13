@@ -21,6 +21,7 @@ from tests.conftest import create_user
 AUTH_PATHS = {
     "/api/auth/signup",
     "/api/auth/login",
+    "/api/auth/refresh",
     "/api/auth/me",
     "/api/auth/logout",
     "/api/auth/forgot-password",
@@ -157,6 +158,7 @@ def test_login_returns_access_token(client, fake_supabase) -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["access_token"].startswith("token-")
+    assert data["refresh_token"] == "refresh-x"
     assert data["token_type"] == "bearer"
     assert data["user"]["email"] == "ada@example.com"
 
@@ -165,6 +167,47 @@ def test_login_with_wrong_password_is_401(client, fake_supabase) -> None:
     create_user(fake_supabase, email="ada@example.com")
     body = {"email": "ada@example.com", "password": "wrong-password"}
     assert client.post("/api/auth/login", json=body).status_code == 401
+
+
+# ---------------------------------------------------------------
+# Refresh
+# ---------------------------------------------------------------
+def test_refresh_returns_a_new_session(client, fake_supabase) -> None:
+    user, _ = create_user(fake_supabase, email="ada@example.com")
+    response = client.post("/api/auth/refresh", json={"refresh_token": "refresh-x"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["access_token"] == f"token-{user.id}"
+    assert data["refresh_token"] == "refresh-x"
+    assert data["user"]["email"] == "ada@example.com"
+    assert fake_supabase.auth.refreshed == ["refresh-x"]
+
+
+def test_refresh_does_not_require_a_bearer_token(client, fake_supabase) -> None:
+    """The refresh token is the only credential needed (no Authorization header)."""
+    create_user(fake_supabase, email="ada@example.com")
+    response = client.post("/api/auth/refresh", json={"refresh_token": "refresh-x"})
+    assert response.status_code == 200
+
+
+def test_refresh_with_invalid_token_is_401(client, fake_supabase) -> None:
+    create_user(fake_supabase, email="ada@example.com")
+    response = client.post("/api/auth/refresh", json={"refresh_token": "not-valid"})
+
+    assert response.status_code == 401
+    assert "expired" in response.json()["detail"].lower()
+
+
+def test_refresh_when_supabase_rejects_is_401(client, fake_supabase) -> None:
+    create_user(fake_supabase, email="ada@example.com")
+    fake_supabase.auth.refresh_error = AuthApiError("Invalid Refresh Token", 400, None)
+
+    assert client.post("/api/auth/refresh", json={"refresh_token": "refresh-x"}).status_code == 401
+
+
+def test_refresh_with_missing_token_is_422(client) -> None:
+    assert client.post("/api/auth/refresh", json={}).status_code == 422
 
 
 # ---------------------------------------------------------------

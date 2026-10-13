@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from supabase import Client, PostgrestAPIError
 
 from app.schemas.material import MaterialResponse, MaterialUpdate
-from app.services import owned_service
+from app.services import extracted_unit_service, owned_service, rag_service
 
 BUCKET = "materials"
 
@@ -79,7 +79,9 @@ def upload_material(
             status_code=502,
             detail=(
                 "Could not store the uploaded file. Make sure the private "
-                "'materials' storage bucket exists (run database/schema.sql)."
+                "'materials' storage bucket exists (run database/schema.sql) "
+                "and the file is within the bucket's size limit "
+                "(see database/migrations/004_materials_bucket_size_limit.sql)."
             ),
         ) from exc
 
@@ -154,9 +156,19 @@ def material_url(client: Client, user_id: str, material_id: str, expires_in: int
 
 
 def delete_material(client: Client, user_id: str, material_id: str) -> None:
-    """Delete the row and its stored object (owner only)."""
+    """Delete the row, its extracted units, its RAG chunks and its stored object.
+
+    Saved notes are deliberately *not* touched: they are the user's own content
+    and survive the material, so the tutor can still answer from them (citing
+    them as saved notes). Only rows owned by the caller are ever removed.
+    """
     row = owned_service.get_item(client, user_id, "materials", material_id)
     path = row.get("storage_path")
+
+    # Remove the retrieval index and extracted units (and their asset files)
+    # before the material row, so no orphaned RAG data or images are left.
+    rag_service.delete_chunks_for_material(client, user_id, material_id)
+    extracted_unit_service.delete_units_for_material(client, user_id, material_id)
 
     owned_service.delete_item(client, user_id, "materials", material_id)
 

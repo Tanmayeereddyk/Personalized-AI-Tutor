@@ -4,6 +4,7 @@ Supabase is replaced by FakeSupabase, so the whole test suite runs
 offline — no real Supabase account, keys, or network needed.
 """
 
+import re
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -18,6 +19,7 @@ from app.api.dependencies import (
     get_supabase,
 )
 from app.main import app
+from app.services import llm_service
 
 
 def _now() -> str:
@@ -36,6 +38,9 @@ class FakeAuth:
         self.update_error: Exception | None = None  # optional update failure
         self._session: dict | None = None       # set by set_session()
         self.require_email_confirmation = False
+        self.refreshed: list[str] = []          # refresh tokens seen
+        self.valid_refresh_token = "refresh-x"
+        self.refresh_error: Exception | None = None
         self.admin = SimpleNamespace(sign_out=self._sign_out)
 
     def sign_up(self, credentials: dict) -> SimpleNamespace:
@@ -93,6 +98,22 @@ class FakeAuth:
             raise AuthApiError("invalid JWT", 401, None)
         return SimpleNamespace(user=SimpleNamespace(**self.users[user_id]))
 
+    def refresh_session(self, refresh_token: str | None = None) -> SimpleNamespace:
+        if not refresh_token:
+            raise AuthSessionMissingError()
+        self.refreshed.append(refresh_token)
+        if self.refresh_error is not None:
+            raise self.refresh_error
+        if refresh_token != self.valid_refresh_token or not self.users:
+            raise AuthApiError("Invalid Refresh Token", 400, None)
+        user = next(iter(self.users.values()))
+        session = SimpleNamespace(
+            access_token=f"token-{user['id']}",
+            token_type="bearer",
+            refresh_token=self.valid_refresh_token,
+        )
+        return SimpleNamespace(session=session, user=SimpleNamespace(**user))
+
     def reset_password_for_email(self, email: str, options: dict | None = None) -> None:
         if self.reset_error is not None:
             raise self.reset_error
@@ -136,17 +157,18 @@ class FakeQuery:
     def __init__(self, rows: list[dict]) -> None:
         self._rows = rows
         self._op = "select"
-        self._values: dict = {}
-        self._filters: list[tuple[str, object]] = []
+        self._values: dict | list[dict] = {}
+        self._filters: list[tuple[str, object, object]] = []
         self._single = False
         self._desc = False
+        self._order_column: str | None = None
         self._error: Exception | None = None
 
     # -- builders -------------------------------------------------
     def select(self, *columns: str) -> "FakeQuery":
         return self
 
-    def insert(self, values: dict) -> "FakeQuery":
+    def insert(self, values: dict | list[dict]) -> "FakeQuery":
         self._op, self._values = "insert", values
         return self
 
@@ -163,10 +185,31 @@ class FakeQuery:
         return self
 
     def eq(self, column: str, value: object) -> "FakeQuery":
-        self._filters.append((column, value))
+        self._filters.append((column, value, "eq"))
+        return self
+
+    def neq(self, column: str, value: object) -> "FakeQuery":
+        self._filters.append((column, value, "neq"))
+        return self
+
+    def gte(self, column: str, value: object) -> "FakeQuery":
+        self._filters.append((column, value, "gte"))
+        return self
+
+    def lte(self, column: str, value: object) -> "FakeQuery":
+        self._filters.append((column, value, "lte"))
+        return self
+
+    @property
+    def not_(self) -> "_NegatedFilter":
+        return _NegatedFilter(self)
+
+    def _not_in(self, column: str, values: list[object]) -> "FakeQuery":
+        self._filters.append((column, values, "not_in"))
         return self
 
     def order(self, column: str, desc: bool = False) -> "FakeQuery":
+        self._order_column = column
         self._desc = desc
         return self
 
@@ -176,21 +219,46 @@ class FakeQuery:
 
     # -- execution ------------------------------------------------
     def _matches(self, row: dict) -> bool:
-        return all(row.get(col) == val for col, val in self._filters)
+        for column, value, op in self._filters:
+            current = row.get(column)
+            if op == "eq" and current != value:
+                return False
+            if op == "neq" and current == value:
+                return False
+            if op == "gte" and not (current is not None and current >= value):
+                return False
+            if op == "lte" and not (current is not None and current <= value):
+                return False
+            if op == "not_in" and current in value:
+                return False
+        return True
 
     def execute(self) -> SimpleNamespace:
         if self._error is not None:
             raise self._error
 
         if self._op == "insert":
-            row = {
-                "id": str(uuid.uuid4()),
-                "created_at": _now(),
-                "updated_at": _now(),
-                **self._values,
-            }
-            self._rows.append(row)
-            data: object = [row]
+            if isinstance(self._values, list):
+                rows = []
+                for values in self._values:
+                    row = {
+                        "id": str(uuid.uuid4()),
+                        "created_at": _now(),
+                        "updated_at": _now(),
+                        **values,
+                    }
+                    rows.append(row)
+                self._rows.extend(rows)
+                data: object = rows
+            else:
+                row = {
+                    "id": str(uuid.uuid4()),
+                    "created_at": _now(),
+                    "updated_at": _now(),
+                    **self._values,
+                }
+                self._rows.append(row)
+                data = [row]
 
         elif self._op == "upsert":
             existing = next(
@@ -219,13 +287,26 @@ class FakeQuery:
 
         else:  # select
             data = [dict(r) for r in self._rows if self._matches(r)]
-            if self._desc:
-                data.sort(key=lambda r: r.get("created_at") or "", reverse=True)
+            if self._order_column:
+                data.sort(
+                    key=lambda r: (r.get(self._order_column) is None, r.get(self._order_column) or 0),
+                    reverse=self._desc,
+                )
 
         if self._single:
             data = data[0] if data else None
 
         return SimpleNamespace(data=data)
+
+
+class _NegatedFilter:
+    """Mimics supabase-py's ``query.not_`` chain (only ``in_`` is used here)."""
+
+    def __init__(self, query: FakeQuery) -> None:
+        self._query = query
+
+    def in_(self, column: str, values: list[object]) -> FakeQuery:
+        return self._query._not_in(column, values)
 
 
 class FakeStorageBucket:
@@ -238,6 +319,12 @@ class FakeStorageBucket:
     def upload(self, path: str, content: bytes, options: dict | None = None) -> SimpleNamespace:
         self._client.stored_objects[f"{self._name}/{path}"] = content
         return SimpleNamespace(path=path)
+
+    def download(self, path: str) -> bytes:
+        key = f"{self._name}/{path}"
+        if key not in self._client.stored_objects:
+            raise Exception(f"Object not found: {key}")
+        return self._client.stored_objects[key]
 
     def remove(self, paths: list[str]) -> list[SimpleNamespace]:
         for path in paths:
@@ -304,3 +391,60 @@ def client(fake_supabase: FakeSupabase):
 def logged_in_user(fake_supabase: FakeSupabase) -> tuple[SimpleNamespace, dict[str, str]]:
     """A ready-made user with valid Authorization headers."""
     return create_user(fake_supabase)
+
+
+# ----------------------------------------------------------------------
+# Language-model stand-in
+# ----------------------------------------------------------------------
+
+def _echo_passage(text: str, number: int) -> str:
+    """The first line of the passage that follows a [#n] marker, if present."""
+    match = re.search(rf"\[#{number}\][^\n]*\n+([^\n]+)", text)
+    if match:
+        return match.group(1).strip()[:220]
+    return "The source discusses this point."
+
+
+def _fake_chat(messages, *, max_tokens: int = 1200, temperature: float = 0.2) -> str:
+    """Deterministic, offline stand-in for a chat completion.
+
+    It echoes the passages that were actually passed in, so tests still prove the
+    real wiring (notes/tutor are generated from retrieved chunks) and that the
+    [#n] citations resolve — without any network call or API key.
+    """
+    user_text = "\n".join(
+        message.get("content", "")
+        for message in messages
+        if message.get("role") == "user"
+    )
+    numbers = sorted({int(n) for n in re.findall(r"\[#(\d+)\]", user_text)})
+    if not numbers:
+        return (
+            "I couldn't find this in your uploaded materials. As general background, "
+            "here is a helpful explanation drawn from general knowledge."
+        )
+    lines = ["## Key points", ""]
+    for number in numbers:
+        lines.append(f"- {_echo_passage(user_text, number)} [#{number}]")
+    return "\n".join(lines)
+
+
+@pytest.fixture(autouse=True)
+def fake_llm(monkeypatch):
+    """Make the language model deterministic and offline for every test.
+
+    The real Gemini/OpenAI client is never called from the test suite. A test that
+    needs a failure path overrides ``chat``/``complete`` or ``is_configured``.
+    """
+    monkeypatch.setattr(llm_service, "is_configured", lambda: True)
+    monkeypatch.setattr(llm_service, "chat", _fake_chat)
+    monkeypatch.setattr(
+        llm_service,
+        "complete",
+        lambda system, user, **kwargs: _fake_chat(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ]
+        ),
+    )

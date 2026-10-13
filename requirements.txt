@@ -15,3 +15,21 @@ supabase
 # Testing
 pytest
 httpx
+
+# Optional extraction engines (NOT required to run the app). Install only the
+# ones you need; each engine degrades to an honest warning when absent.
+#   pymupdf            # PDF text, tables and page images
+#   opencv-python      # video keyframe extraction
+#   python-pptx        # PPTX slide text
+#   pytesseract        # OCR fallback for scanned PDFs
+#                      #   also needs the Tesseract engine binary installed
+#   openai-whisper     # video transcripts; also needs the ffmpeg binary
+#   pillow             # image handling for OCR/page rendering
+
+# Optional: a real local embedding model for retrieval. The default embedder is
+# built in (feature hashing, no download, no API key), so this is optional.
+#   sentence-transformers  # local embeddings (no API key)
+#   numpy                  # numeric helpers used by some embedding backends
+# The optional LLM for AI notes/tutor calls any OpenAI-compatible API over httpx
+# (already required below) — no extra package is needed.
+

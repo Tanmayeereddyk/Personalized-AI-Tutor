@@ -8,12 +8,12 @@ import { AuthCard, FieldError } from "@/components/auth/AuthCard";
 export const Route = createFileRoute("/reset-password")({
   head: () => ({
     meta: [
-      { title: "Reset password — StudyAI" },
-      { name: "description", content: "Choose a new password for your StudyAI account." },
-      { property: "og:title", content: "Reset password — StudyAI" },
+      { title: "Reset password — Lumio" },
+      { name: "description", content: "Choose a new password for your Lumio account." },
+      { property: "og:title", content: "Reset password — Lumio" },
       {
         property: "og:description",
-        content: "Set a new password for your StudyAI account.",
+        content: "Set a new password for your Lumio account.",
       },
     ],
   }),

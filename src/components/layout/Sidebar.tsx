@@ -33,7 +33,7 @@ export function Sidebar({ compact = false, onNavigate }: { compact?: boolean; on
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-[0_0_24px_-4px] shadow-primary/60">
           <Sparkles className="h-4 w-4" />
         </span>
-        {!compact && <span className="text-[15px] font-semibold tracking-tight">StudyAI</span>}
+        {!compact && <span className="text-[15px] font-semibold tracking-tight">Lumio</span>}
       </div>
 
       <nav className="space-y-0.5 px-3">

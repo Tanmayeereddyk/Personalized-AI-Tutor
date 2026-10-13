@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { api, clearToken, getToken, setToken } from "./api";
+import { api, clearSession, getToken, setToken, setUnauthorizedHandler } from "./api";
+import { clearTutorChatHistory } from "./tutor-chat-storage";
 
 /**
  * Real authentication, backed by the FastAPI + Supabase backend.
@@ -40,6 +41,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const previousUserId = useRef<string | null>(null);
 
+  // A 401 from any authenticated request means the stored token is no longer
+  // valid. End the session (the token itself is already cleared by api.ts) so
+  // the route guard cleans up and sends the user back to /login, rather than
+  // leaving the UI "signed in" with no token — which surfaces as
+  // "Not authenticated" on every page.
+  useEffect(() => {
+    setUnauthorizedHandler(() => setUser(null));
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
   // Restore the session on first load.
   useEffect(() => {
     let active = true;
@@ -52,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const me = await api.auth.me();
         if (active) setUser(me);
       } catch {
-        clearToken();
+        clearSession();
         if (active) setUser(null);
       } finally {
         if (active) setReady(true);
@@ -75,6 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login: Auth["login"] = async (email, password) => {
     try {
       const me = await api.auth.login(email, password);
+      // A fresh sign-in always starts the tutor with a clean slate.
+      clearTutorChatHistory();
       setUser(me);
       return null;
     } catch (error) {
@@ -89,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Email confirmation is enabled: no session until the link is clicked.
         return { confirmationRequired: true, message: result.message };
       }
+      clearTutorChatHistory();
       setUser(result.user);
       return {};
     } catch (error) {
@@ -98,7 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout: Auth["logout"] = async () => {
     await api.auth.logout();
-    clearToken();
+    clearSession();
+    clearTutorChatHistory();
     setUser(null);
   };
 

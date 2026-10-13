@@ -9,15 +9,15 @@ import { AuthCard, FieldError, GoogleButton } from "@/components/auth/AuthCard";
 export const Route = createFileRoute("/signup")({
   head: () => ({
     meta: [
-      { title: "Create account — StudyAI" },
+      { title: "Create account — Lumio" },
       {
         name: "description",
-        content: "Create your free StudyAI account and start learning from your own materials.",
+        content: "Create your free Lumio account and start learning from your own materials.",
       },
-      { property: "og:title", content: "Create account — StudyAI" },
+      { property: "og:title", content: "Create account — Lumio" },
       {
         property: "og:description",
-        content: "Sign up for StudyAI, your personal AI study companion.",
+        content: "Sign up for Lumio, your personal AI study companion.",
       },
     ],
   }),

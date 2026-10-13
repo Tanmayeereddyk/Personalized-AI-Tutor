@@ -1,60 +1,95 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { NotebookPen, FileText } from "lucide-react";
-import { useNotes } from "@/lib/queries";
-import { EmptyState, PageHeader } from "@/components/ui/kit";
+import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { Loader2, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+
+import { StudySurface } from "@/components/study/StudySurface";
+import { useStoredStudyView } from "@/lib/study-view";
+import { PageHeader } from "@/components/ui/kit";
+import { useGenerateNotes, useMaterials } from "@/lib/queries";
+import { useCourse } from "@/lib/store";
 
 export const Route = createFileRoute("/courses/$courseId/notes")({
   component: Notes,
 });
 
-function Notes() {
+export function Notes() {
   const { courseId } = Route.useParams();
-  const notes = useNotes(courseId);
-  const list = notes.data ?? [];
+  const course = useCourse(courseId);
+  const materials = useMaterials(courseId);
+  const generate = useGenerateNotes(courseId);
+
+  const list = materials.data ?? [];
+  const [materialId, setMaterialId] = useState("");
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [view, setView] = useStoredStudyView("studyai.notes.view", "notes");
+
+  const material = list.find((m) => m.id === materialId) ?? list[0];
+
+  const generateNotes = async () => {
+    try {
+      await generate.mutateAsync(materialId ? { materialId } : {});
+      setSelectedNoteId(null);
+      toast.success("Notes generated from your materials.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't generate notes.");
+    }
+  };
 
   return (
     <div>
-      <PageHeader title="AI Notes" subtitle="Course notes generated from your learning materials." />
+      <PageHeader
+        title="AI Notes"
+        subtitle="Structured study notes written by the AI from your own materials, with sources."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="field max-w-xs"
+              value={materialId}
+              onChange={(e) => setMaterialId(e.target.value)}
+              aria-label="Choose which material to use"
+            >
+              <option value="">All materials in this course</option>
+              {list.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn btn-primary"
+              onClick={() => void generateNotes()}
+              disabled={generate.isPending}
+            >
+              {generate.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {generate.isPending ? "Generating…" : "Generate Notes"}
+            </button>
+          </div>
+        }
+      />
 
-      <div className="card mb-6 flex items-start gap-3 p-5">
-        <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-secondary text-muted-foreground"><FileText className="h-4 w-4" /></span>
-        <div>
-          <div className="font-medium">Note generation isn't available yet</div>
-          <p className="text-sm text-muted-foreground">
-            Automatic notes are generated from your materials by the StudyAI service. It isn't enabled yet, so no notes are
-            created for you. Anything already saved to your account appears below.
-          </p>
-        </div>
-      </div>
+      {generate.error ? (
+        <p className="mb-4 text-sm text-destructive">{(generate.error as Error).message}</p>
+      ) : null}
 
-      {notes.isLoading ? (
-        <div className="card px-6 py-16 text-center text-sm text-muted-foreground">Loading notes…</div>
-      ) : notes.isError ? (
-        <div className="card px-6 py-16 text-center">
-          <p className="font-medium">Couldn't load notes</p>
-          <p className="mt-1 text-sm text-muted-foreground">{(notes.error as Error).message}</p>
-          <button className="btn btn-primary mt-5" onClick={() => notes.refetch()}>Try again</button>
-        </div>
-      ) : list.length === 0 ? (
-        <EmptyState icon={NotebookPen} title="No notes yet." body="Notes will appear here once automatic note generation is available. You can upload materials in the meantime."
-          action={<Link to="/courses/$courseId/materials" params={{ courseId }} className="btn btn-primary">Manage Materials</Link>} />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {list.map((n, i) => (
-            <div key={n.id} className="card lift fade-up flex flex-col p-5" style={{ animationDelay: `${i * 50}ms` }}>
-              <div className="flex items-center justify-between">
-                <NotebookPen className="h-5 w-5 text-primary" />
-                <span className="text-xs text-muted-foreground">Updated {n.updated}</span>
-              </div>
-              <h3 className="mt-4 text-lg font-medium">{n.title}</h3>
-              {n.content ? <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm text-muted-foreground">{n.content}</p> : null}
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {n.topics.map((t) => <span key={t} className="chip">{t}</span>)}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <StudySurface
+        courseId={courseId}
+        courseCode={course?.code ?? "Course"}
+        material={material}
+        view={view}
+        onViewChange={setView}
+        selectedNoteId={selectedNoteId}
+        onSelectNote={setSelectedNoteId}
+        onBack={() => setSelectedNoteId(null)}
+        onOpenMaterial={(id) => {
+          setMaterialId(id);
+          setView("material");
+        }}
+      />
     </div>
   );
 }

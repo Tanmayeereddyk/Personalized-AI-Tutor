@@ -13,13 +13,13 @@ from pydantic import BaseModel, Field
 # ------------------------------------------------------------------
 class NoteCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
-    content: str | None = Field(default=None, max_length=20000)
+    content: str | None = Field(default=None, max_length=200_000)
     topics: list[str] = Field(default_factory=list)
 
 
 class NoteUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=300)
-    content: str | None = Field(default=None, max_length=20000)
+    content: str | None = Field(default=None, max_length=200_000)
     topics: list[str] | None = None
 
 
@@ -30,6 +30,12 @@ class NoteResponse(BaseModel):
     title: str
     content: str | None = None
     topics: list[str] = Field(default_factory=list)
+    # RAG provenance: which materials a generated note came from and the exact
+    # source references it cites. Empty for notes written by hand.
+    source_material_ids: list[str] = Field(default_factory=list)
+    source_refs: list[dict] = Field(default_factory=list)
+    generated: bool = False
+    generation_method: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
 

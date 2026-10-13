@@ -35,7 +35,25 @@ vi.mock("@/lib/queries", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
-  api: { materials: { url: vi.fn(async () => "https://example.com/file.pdf") } },
+  api: {
+    materials: { url: vi.fn(async () => "https://example.com/file.pdf") },
+    tutor: {
+      ask: vi.fn(async () => ({
+        answer: "Grounded answer from your materials.",
+        citations: [
+          {
+            kind: "pdf",
+            label: "p. 1",
+            materialId: "m1",
+            materialName: "Notes.pdf",
+            page: 1,
+          },
+        ],
+        grounded: true,
+        usedMaterials: ["m1"],
+      })),
+    },
+  },
 }));
 
 const sendMessage = (text: string) => {
@@ -94,18 +112,15 @@ describe("TutorWorkspace", () => {
     expect(screen.getByLabelText("Message the tutor")).toBeInTheDocument();
   });
 
-  it("keeps the conversation when the notes panel is toggled", () => {
-    vi.useFakeTimers();
+  it("keeps the conversation when the notes panel is toggled", async () => {
     render(<TutorWorkspace courseId="c1" />);
 
     sendMessage("Explain dynamic programming");
     expect(screen.getByText("Explain dynamic programming")).toBeInTheDocument();
 
-    // The reply timer resolves to an honest "not connected" notice.
-    act(() => {
-      vi.advanceTimersByTime(700);
-    });
-    expect(screen.getByText(/isn't connected/i)).toBeInTheDocument();
+    // The grounded reply comes back from the tutor endpoint, with its sources.
+    expect(await screen.findByText(/Grounded answer from your materials/)).toBeInTheDocument();
+    expect(screen.getByText(/Notes\.pdf/)).toBeInTheDocument();
 
     // Toggling the notes panel must not clear the conversation.
     fireEvent.click(screen.getByLabelText("Show notes panel"));

@@ -9,10 +9,10 @@ import { useEvents, sortEvents, todayKey, formatTime } from "@/lib/events";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Dashboard — StudyAI" },
+      { title: "Dashboard — Lumio" },
       { name: "description", content: "Your personal study dashboard: continue learning, track mastery and jump into your courses." },
-      { property: "og:title", content: "Dashboard — StudyAI" },
-      { property: "og:description", content: "Your personal study dashboard on StudyAI." },
+      { property: "og:title", content: "Dashboard — Lumio" },
+      { property: "og:description", content: "Your personal study dashboard on Lumio." },
     ],
   }),
   component: Dashboard,

@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { ArrowUp, Info, Sparkles } from "lucide-react";
 
+import { CitationChips } from "@/components/Citations";
+import { MarkdownDocument } from "@/components/notes/MarkdownDocument";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/types";
 
@@ -44,16 +46,14 @@ function MessageRow({ m }: { m: ChatMessage }) {
         <Sparkles className="h-4 w-4" />
       </span>
       <div className="min-w-0 flex-1 space-y-3">
-        <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{m.content}</div>
-        {m.citations && m.citations.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {m.citations.map((c) => (
-              <span key={c.label + c.ref} className="chip">
-                {c.label} · {c.ref}
-              </span>
-            ))}
-          </div>
+        <MarkdownDocument markdown={m.content} className="text-sm leading-relaxed" />
+        {m.grounded === false && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-[11px] text-muted-foreground">
+            <Info className="h-3 w-3" />
+            General knowledge — not from your materials
+          </span>
         )}
+        {m.citations && m.citations.length > 0 && <CitationChips citations={m.citations} />}
       </div>
     </div>
   );

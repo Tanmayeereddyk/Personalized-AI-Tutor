@@ -80,9 +80,16 @@ export function EmptyState({ icon: Icon, title, body, action }: { icon: LucideIc
   );
 }
 
-export function Modal({ open, onOpenChange, title, description, children, wide }: {
+export function Modal({ open, onOpenChange, title, description, children, wide, size }: {
   open: boolean; onOpenChange: (o: boolean) => void; title: string; description?: string; children: ReactNode; wide?: boolean;
+  size?: "sm" | "md" | "lg" | "xl" | "full";
 }) {
+  const width =
+    size === "full" ? "max-w-[95vw]"
+    : size === "xl" ? "max-w-5xl"
+    : size === "lg" ? "max-w-3xl"
+    : wide ? "max-w-2xl"
+    : "max-w-lg";
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -91,7 +98,7 @@ export function Modal({ open, onOpenChange, title, description, children, wide }
           className={cn(
             "card fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto bg-popover p-6 outline-none",
             "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
-            wide ? "max-w-2xl" : "max-w-lg",
+            width,
           )}
         >
           <div className="mb-5 flex items-start justify-between gap-4">

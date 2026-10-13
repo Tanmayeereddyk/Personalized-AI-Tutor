@@ -173,7 +173,7 @@ export function EditCourseModal({
   };
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="Edit course" description="Update the details shown across StudyAI.">
+    <Modal open={open} onOpenChange={onOpenChange} title="Edit course" description="Update the details shown across Lumio.">
       <CourseForm
         initial={{
           name: course.name,

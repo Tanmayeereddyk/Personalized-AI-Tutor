@@ -11,8 +11,18 @@ Business logic lives in services/, not here.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, courses, health, learning, materials
+from app.api.routes import auth, courses, extraction, health, learning, materials, rag
 from app.core.config import settings
+
+import logging
+
+# Show the app's own INFO logs (LLM call timings, notes/tutor timings) in the
+# server console alongside uvicorn's. Does nothing if logging is already set up.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:     %(message)s",
+    force=False,
+)
 
 # Create the application. Interactive docs are served at /docs.
 app = FastAPI(
@@ -35,6 +45,8 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(courses.router)
 app.include_router(materials.router)
+app.include_router(extraction.router)
+app.include_router(rag.router)
 app.include_router(learning.notes_router)
 app.include_router(learning.quizzes_router)
 app.include_router(learning.decks_router)

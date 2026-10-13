@@ -27,7 +27,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Dialog.Content>
             </Dialog.Portal>
           </Dialog.Root>
-          <span className="flex items-center gap-2 font-semibold"><Sparkles className="h-4 w-4 text-primary" />StudyAI</span>
+          <span className="flex items-center gap-2 font-semibold"><Sparkles className="h-4 w-4 text-primary" />Lumio</span>
         </header>
         <main className="relative flex-1">
           <div className="grid-bg pointer-events-none absolute inset-x-0 top-0 h-80" />

@@ -77,6 +77,36 @@ create table if not exists public.notes (
     updated_at timestamptz not null default now()
 );
 
+-- RAG provenance for generated notes (see migrations/005_rag_pipeline.sql).
+alter table public.notes add column if not exists source_material_ids uuid[] not null default '{}';
+alter table public.notes add column if not exists source_refs jsonb not null default '[]'::jsonb;
+alter table public.notes add column if not exists generated boolean not null default false;
+alter table public.notes add column if not exists generation_method text;
+
+-- ------------------------------------------------------------
+-- RAG CHUNKS: indexed (embedded) content extracted from materials.
+-- Embeddings are stored as JSON so no pgvector extension is required.
+-- ------------------------------------------------------------
+create table if not exists public.rag_chunks (
+    id                      uuid primary key default gen_random_uuid(),
+    user_id                 uuid not null references auth.users (id) on delete cascade,
+    material_id             uuid not null references public.materials (id) on delete cascade,
+    course_id               uuid not null references public.courses (id) on delete cascade,
+    source_type             text not null default 'doc',
+    chunk_order             integer not null default 0,
+    content                 text not null,
+    page_number             integer,
+    slide_number            integer,
+    start_timestamp_seconds double precision,
+    end_timestamp_seconds   double precision,
+    extraction_method       text,
+    source_kind             text,
+    embedding               jsonb not null default '[]'::jsonb,
+    embedding_model         text,
+    created_at              timestamptz not null default now(),
+    updated_at              timestamptz not null default now()
+);
+
 -- ------------------------------------------------------------
 -- TOPICS: knowledge map entries per course
 -- ------------------------------------------------------------
@@ -257,6 +287,9 @@ create index if not exists calendar_user_idx            on public.calendar_event
 create index if not exists conversations_user_idx       on public.tutor_conversations (user_id, course_id);
 create index if not exists messages_user_idx            on public.tutor_messages (user_id, conversation_id);
 create index if not exists bookmarks_user_idx           on public.bookmarks (user_id, course_id);
+create index if not exists rag_chunks_user_idx          on public.rag_chunks (user_id, course_id);
+create index if not exists rag_chunks_material_idx      on public.rag_chunks (user_id, material_id);
+create index if not exists rag_chunks_order_idx         on public.rag_chunks (material_id, chunk_order);
 
 -- ------------------------------------------------------------
 -- updated_at: keep timestamps fresh automatically
@@ -277,7 +310,8 @@ declare
     tables text[] := array[
         'profiles', 'courses', 'materials', 'notes', 'topics', 'modules',
         'lessons', 'learning_progress', 'quizzes', 'flashcard_decks',
-        'assessments', 'calendar_events', 'tutor_conversations', 'bookmarks'
+        'assessments', 'calendar_events', 'tutor_conversations', 'bookmarks',
+        'rag_chunks'
     ];
 begin
     foreach t in array tables loop
@@ -303,7 +337,7 @@ declare
         'profiles', 'courses', 'materials', 'notes', 'topics', 'modules',
         'lessons', 'learning_progress', 'quizzes', 'flashcard_decks',
         'flashcards', 'assessments', 'calendar_events',
-        'tutor_conversations', 'tutor_messages', 'bookmarks'
+        'tutor_conversations', 'tutor_messages', 'bookmarks', 'rag_chunks'
     ];
 begin
     foreach t in array tables loop
@@ -334,7 +368,7 @@ declare
         'courses', 'materials', 'notes', 'topics', 'modules', 'lessons',
         'learning_progress', 'quizzes', 'flashcard_decks', 'flashcards',
         'assessments', 'calendar_events', 'tutor_conversations',
-        'tutor_messages', 'bookmarks'
+        'tutor_messages', 'bookmarks', 'rag_chunks'
     ];
 begin
     foreach t in array tables loop

@@ -7,9 +7,9 @@ import { EmptyState } from "@/components/ui/kit";
 export const Route = createFileRoute("/courses/")({
   head: () => ({
     meta: [
-      { title: "Your Courses — StudyAI" },
+      { title: "Your Courses — Lumio" },
       { name: "description", content: "Everything you're learning, in one place." },
-      { property: "og:title", content: "Your Courses — StudyAI" },
+      { property: "og:title", content: "Your Courses — Lumio" },
       { property: "og:description", content: "Everything you're learning, in one place." },
     ],
   }),

@@ -22,6 +22,17 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class RefreshRequest(BaseModel):
+    """Body for POST /api/auth/refresh.
+
+    The refresh token issued at login is exchanged for a fresh session, so a
+    signed-in user can keep working past the short access-token expiry. It is
+    the only credential needed — no Bearer token is required.
+    """
+
+    refresh_token: str = Field(min_length=1, max_length=4096)
+
+
 class ForgotPasswordRequest(BaseModel):
     """Body for POST /api/auth/forgot-password.
 
@@ -54,9 +65,10 @@ class AuthUser(BaseModel):
 
 
 class SessionResponse(BaseModel):
-    """Returned by login: a Supabase access token plus the user."""
+    """Returned by login and refresh: a Supabase access token plus the user."""
 
     access_token: str
+    refresh_token: str | None = None
     token_type: str = "bearer"
     user: AuthUser
 
@@ -71,6 +83,7 @@ class SignupResponse(BaseModel):
     message: str
     user: AuthUser
     access_token: str | None = None
+    refresh_token: str | None = None
     token_type: str = "bearer"
 
 

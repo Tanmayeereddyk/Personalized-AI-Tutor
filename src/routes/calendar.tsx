@@ -11,9 +11,9 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/calendar")({
   head: () => ({
     meta: [
-      { title: "Calendar — StudyAI" },
+      { title: "Calendar — Lumio" },
       { name: "description", content: "Plan your study schedule: add, edit and track upcoming events." },
-      { property: "og:title", content: "Calendar — StudyAI" },
+      { property: "og:title", content: "Calendar — Lumio" },
       { property: "og:description", content: "Your study schedule at a glance." },
     ],
   }),

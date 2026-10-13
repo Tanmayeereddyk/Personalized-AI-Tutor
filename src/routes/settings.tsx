@@ -7,10 +7,10 @@ import { Label, Pill } from "@/components/ui/kit";
 export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
-      { title: "Settings — StudyAI" },
-      { name: "description", content: "Manage your StudyAI profile and study preferences." },
-      { property: "og:title", content: "Settings — StudyAI" },
-      { property: "og:description", content: "Manage your StudyAI profile and preferences." },
+      { title: "Settings — Lumio" },
+      { name: "description", content: "Manage your Lumio profile and study preferences." },
+      { property: "og:title", content: "Settings — Lumio" },
+      { property: "og:description", content: "Manage your Lumio profile and preferences." },
     ],
   }),
   component: Settings,

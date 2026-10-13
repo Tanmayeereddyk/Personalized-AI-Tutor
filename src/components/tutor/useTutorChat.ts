@@ -1,31 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { tutorChatStorageKey } from "@/lib/tutor-chat-storage";
 import type { ChatMessage } from "@/lib/types";
 
 /**
  * Conversation state for the tutor panel.
  *
- * The backend for this project does not expose a tutor/chat endpoint yet, and
- * the app deliberately never fabricates AI answers (see the Tutor placeholder
- * that shipped before this workspace). So this hook keeps a *real* conversation
- * history for the signed-in user — persisted per user + course in localStorage
- * — and is honest when the model isn't connected instead of inventing a reply.
- *
- * When a real tutor endpoint is added, `send` is the single place that needs to
- * call it; the message list, persistence, pending state and scrolling already
- * work.
+ * `send` calls the tutor endpoint with the recent conversation history: the
+ * backend retrieves the most relevant chunks from the signed-in user's own
+ * materials (and saved notes), then asks the configured language model to
+ * answer conversationally. Answers that are grounded in the student's material
+ * come back with citations; a general-knowledge answer is marked `grounded:
+ * false` and flagged in the UI. Errors are surfaced as a system message rather
+ * than a made-up reply. The conversation is kept per user + course in
+ * localStorage.
  */
-
-const NOT_CONNECTED =
-  "Live tutoring isn't connected in this build, so no answer was generated. " +
-  "Your question is saved in this conversation.";
-
-const KEY_PREFIX = "studyai.tutor.chat";
-
-function storageKey(userId: string, courseId: string): string {
-  return `${KEY_PREFIX}.${userId}.${courseId}`;
-}
 
 function readMessages(key: string): ChatMessage[] {
   if (typeof window === "undefined") return [];
@@ -75,11 +66,10 @@ export interface TutorChat {
 export function useTutorChat(courseId: string): TutorChat {
   const { user } = useAuth();
   const userId = user?.id ?? "anonymous";
-  const key = storageKey(userId, courseId);
+  const key = tutorChatStorageKey(userId, courseId);
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => readMessages(key));
   const [pending, setPending] = useState(false);
-  const pendingTimer = useRef<number | null>(null);
 
   // Reload when the user or course changes so one conversation never leaks
   // into another.
@@ -93,34 +83,47 @@ export function useTutorChat(courseId: string): TutorChat {
     persist(key, messages);
   }, [key, messages]);
 
-  // Clean up any in-flight "thinking" timer on unmount / key change.
-  useEffect(
-    () => () => {
-      if (pendingTimer.current !== null) window.clearTimeout(pendingTimer.current);
-    },
-    [key],
-  );
-
   const send = useCallback(
-    (text: string) => {
+    async (text: string) => {
       const content = text.trim();
       if (!content || pending) return;
+
+      // Replay the recent conversation so follow-up questions keep context.
+      const history = messages
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .slice(-10)
+        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+
       setMessages((m) => [...m, { id: newId(), role: "user", content }]);
       setPending(true);
-      pendingTimer.current = window.setTimeout(() => {
-        pendingTimer.current = null;
+      try {
+        const answer = await api.tutor.ask(courseId, { question: content, history });
+        setMessages((m) => [
+          ...m,
+          {
+            id: newId(),
+            role: "assistant",
+            content: answer.answer,
+            // `grounded` is false for a general-knowledge answer; the UI shows a
+            // badge so the student knows it didn't come from their materials.
+            grounded: answer.grounded,
+            ...(answer.citations.length ? { citations: answer.citations } : {}),
+          },
+        ]);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "The tutor is unavailable right now. Please try again.";
+        setMessages((m) => [...m, { id: newId(), role: "system", content: message }]);
+      } finally {
         setPending(false);
-        setMessages((m) => [...m, { id: newId(), role: "system", content: NOT_CONNECTED }]);
-      }, 600);
+      }
     },
-    [pending],
+    [courseId, pending, messages],
   );
 
   const reset = useCallback(() => {
-    if (pendingTimer.current !== null) {
-      window.clearTimeout(pendingTimer.current);
-      pendingTimer.current = null;
-    }
     setPending(false);
     setMessages([]);
   }, []);

@@ -20,6 +20,7 @@ from app.schemas.auth import (
     LoginRequest,
     MeResponse,
     MessageResponse,
+    RefreshRequest,
     ResetPasswordRequest,
     SessionResponse,
     SignupRequest,
@@ -47,6 +48,15 @@ def login(
 ) -> SessionResponse:
     """Sign in and receive an access token."""
     return auth_service.login(anon_client, payload)
+
+
+@router.post("/api/auth/refresh", response_model=SessionResponse)
+def refresh(
+    payload: RefreshRequest,
+    anon_client: Client = Depends(get_supabase),
+) -> SessionResponse:
+    """Exchange a refresh token for a new access token (keeps users signed in)."""
+    return auth_service.refresh(anon_client, payload)
 
 
 @router.get("/api/auth/me", response_model=MeResponse)

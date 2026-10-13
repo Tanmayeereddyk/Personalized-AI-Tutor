@@ -9,7 +9,7 @@ export function AuthCard({ title, subtitle, children, footer }: { title: string;
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Sparkles className="h-4 w-4" />
           </span>
-          <span className="text-[15px] font-semibold tracking-tight">StudyAI</span>
+          <span className="text-[15px] font-semibold tracking-tight">Lumio</span>
         </div>
         <div className="card bg-card p-6 sm:p-8">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>

@@ -18,6 +18,10 @@ export const useMaterials = (courseId: string) => {
     queryKey: ["materials", user?.id, courseId],
     queryFn: () => api.materials.list(courseId),
     enabled: !!user && !!courseId,
+    // Uploading a file starts extraction in the background, so poll while any
+    // material is still processing and stop as soon as they are all settled.
+    refetchInterval: (query) =>
+      query.state.data?.some((material) => material.status === "processing") ? 3000 : false,
   });
 };
 
@@ -44,12 +48,137 @@ export const useDeleteMaterial = (courseId: string) => {
   });
 };
 
+// ------------------------------------------------------------------
+// Extraction
+// ------------------------------------------------------------------
+
+/** Polls the material's extraction status while it is still processing. */
+export const useExtractionStatus = (materialId: string) => {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["extraction-status", user?.id, materialId],
+    queryFn: () => api.extraction.status(materialId),
+    enabled: !!user && !!materialId,
+    refetchInterval: (query) => (query.state.data?.status === "processing" ? 1500 : false),
+  });
+};
+
+/** All extracted units for a material, in source (page/slide/timestamp) order. */
+export const useExtractedUnits = (materialId: string) => {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["extracted-units", user?.id, materialId],
+    queryFn: () => api.extraction.units(materialId),
+    enabled: !!user && !!materialId,
+  });
+};
+
+/** Just the audio transcript (Whisper segments) for a video material. */
+export const useTranscript = (materialId: string, enabled = true) => {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["transcript", user?.id, materialId],
+    queryFn: () => api.extraction.transcript(materialId),
+    enabled: !!user && !!materialId && enabled,
+  });
+};
+
+const invalidateExtraction = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  userId: string | undefined,
+  materialId: string,
+) => {
+  queryClient.invalidateQueries({ queryKey: ["materials", userId] });
+  queryClient.invalidateQueries({ queryKey: ["extraction-status", userId, materialId] });
+  queryClient.invalidateQueries({ queryKey: ["extracted-units", userId, materialId] });
+  queryClient.invalidateQueries({ queryKey: ["transcript", userId, materialId] });
+  queryClient.invalidateQueries({ queryKey: ["index-status", userId, materialId] });
+};
+
+export const useExtractMaterial = (materialId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.extraction.start(materialId),
+    onSuccess: () => invalidateExtraction(queryClient, user?.id, materialId),
+  });
+};
+
+export const useRetryExtraction = (materialId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.extraction.retry(materialId),
+    onSuccess: () => invalidateExtraction(queryClient, user?.id, materialId),
+  });
+};
+
+/** A short-lived signed URL for one unit's extracted image/frame. */
+export const useUnitAssetUrl = (unitId: string) => {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["unit-asset-url", user?.id, unitId],
+    queryFn: () => api.extraction.assetUrl(unitId),
+    enabled: !!user && !!unitId,
+    staleTime: 60 * 1000,
+  });
+};
+
 export const useNotes = (courseId: string) => {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["notes", user?.id, courseId],
     queryFn: () => api.notes.list(courseId),
     enabled: !!user && !!courseId,
+  });
+};
+
+/** Generate RAG-grounded notes and refresh the notes list. */
+export const useGenerateNotes = (courseId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { materialId?: string | undefined; noteId?: string | undefined } = {}) =>
+      api.notes.generate(courseId, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notes", user?.id, courseId] });
+    },
+  });
+};
+
+export const useDeleteNote = (courseId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (noteId: string) => api.notes.remove(noteId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notes", user?.id, courseId] });
+    },
+  });
+};
+
+// ------------------------------------------------------------------
+// RAG index (chunks + embeddings) for one material
+// ------------------------------------------------------------------
+
+export const useIndexStatus = (materialId: string, enabled = true) => {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["index-status", user?.id, materialId],
+    queryFn: () => api.materials.indexStatus(materialId),
+    enabled: !!user && !!materialId && enabled,
+  });
+};
+
+export const useIndexMaterial = (materialId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.materials.index(materialId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["index-status", user?.id, materialId] });
+      queryClient.invalidateQueries({ queryKey: ["index-status", user?.id] });
+    },
   });
 };
 
@@ -66,8 +195,13 @@ export const useCreateQuiz = (courseId: string) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name: string; topic?: string | undefined; difficulty: string; score?: number; total?: number }) =>
-      api.quizzes.create(courseId, input),
+    mutationFn: (input: {
+      name: string;
+      topic?: string | undefined;
+      difficulty: string;
+      score?: number;
+      total?: number;
+    }) => api.quizzes.create(courseId, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quizzes", user?.id, courseId] });
     },
@@ -87,7 +221,8 @@ export const useCreateDeck = (courseId: string) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { topic: string; card_count?: number }) => api.decks.create(courseId, input),
+    mutationFn: (input: { topic: string; card_count?: number }) =>
+      api.decks.create(courseId, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flashcard-decks", user?.id, courseId] });
     },
@@ -107,8 +242,13 @@ export const useCreateAssessment = (courseId: string) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name: string; topics?: string[]; score?: number; total?: number; duration_minutes?: number }) =>
-      api.assessments.create(courseId, input),
+    mutationFn: (input: {
+      name: string;
+      topics?: string[];
+      score?: number;
+      total?: number;
+      duration_minutes?: number;
+    }) => api.assessments.create(courseId, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assessments", user?.id, courseId] });
     },

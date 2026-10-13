@@ -19,6 +19,7 @@ from app.schemas.auth import (
     MeResponse,
     MessageResponse,
     ProfileResponse,
+    RefreshRequest,
     ResetPasswordRequest,
     SessionResponse,
     SignupRequest,
@@ -30,6 +31,18 @@ def _auth_detail(exc: AuthError) -> str:
     """Extract a safe, user-friendly message from a Supabase auth error."""
     message = getattr(exc, "message", None)
     return str(message) if message else "Authentication failed"
+
+
+def _session_response(result) -> SessionResponse:
+    """Build a SessionResponse (access + refresh token) from a Supabase result."""
+    session = result.session
+    user = result.user
+    return SessionResponse(
+        access_token=session.access_token,
+        refresh_token=session.refresh_token,
+        token_type=session.token_type or "bearer",
+        user=AuthUser(id=user.id, email=user.email),
+    )
 
 
 def get_user_from_token(client: Client, token: str) -> AuthUser:
@@ -120,6 +133,7 @@ def signup(anon_client: Client, admin_client: Client, payload: SignupRequest) ->
         message="Signed up successfully.",
         user=user,
         access_token=result.session.access_token,
+        refresh_token=result.session.refresh_token,
         token_type=result.session.token_type or "bearer",
     )
 
@@ -137,11 +151,24 @@ def login(anon_client: Client, payload: LoginRequest) -> SessionResponse:
     if result.session is None or result.user is None:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    return SessionResponse(
-        access_token=result.session.access_token,
-        token_type=result.session.token_type or "bearer",
-        user=AuthUser(id=result.user.id, email=result.user.email),
-    )
+    return _session_response(result)
+
+
+def refresh(anon_client: Client, payload: RefreshRequest) -> SessionResponse:
+    """Exchange a refresh token for a fresh session.
+
+    Supabase rotates the refresh token on every exchange, so the caller must
+    store the new one. A missing, invalid, or already-used token is a 401.
+    """
+    try:
+        result = anon_client.auth.refresh_session(payload.refresh_token)
+    except AuthError as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired session") from exc
+
+    if result.session is None or result.user is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    return _session_response(result)
 
 
 def get_me(admin_client: Client, user: AuthUser) -> MeResponse:
