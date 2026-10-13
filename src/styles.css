@@ -78,21 +78,62 @@
   --course-rose: oklch(0.75 0.16 10);
   --course-violet: oklch(0.74 0.14 290);
   --course-lime: oklch(0.88 0.17 125);
+  --grid-line: oklch(1 0 0 / 3%);
   --gradient-glow: radial-gradient(60% 80% at 20% 0%, oklch(0.87 0.16 168 / 16%), transparent 70%);
   --shadow-card: 0 1px 0 oklch(1 0 0 / 4%) inset, 0 10px 30px -15px oklch(0 0 0 / 60%);
   --shadow-lift: 0 1px 0 oklch(1 0 0 / 6%) inset, 0 20px 40px -18px oklch(0 0 0 / 70%), 0 0 0 1px oklch(0.87 0.16 168 / 18%);
 }
 
+/* Light theme: `:root.light` outranks `:root`, so the class on <html>
+   switches the whole app between dark (default) and light. */
+:root.light {
+  --background: oklch(0.985 0.002 260);
+  --foreground: oklch(0.22 0.012 260);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.962 0.005 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.012 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.012 260);
+  --primary: oklch(0.52 0.13 165);
+  --primary-foreground: oklch(0.985 0.005 160);
+  --secondary: oklch(0.945 0.006 260);
+  --secondary-foreground: oklch(0.25 0.014 260);
+  --muted: oklch(0.955 0.005 260);
+  --muted-foreground: oklch(0.47 0.02 260);
+  --accent: oklch(0.925 0.008 260);
+  --accent-foreground: oklch(0.25 0.014 260);
+  --destructive: oklch(0.55 0.19 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --success: oklch(0.5 0.13 155);
+  --warning: oklch(0.62 0.13 75);
+  --border: oklch(0 0 0 / 10%);
+  --input: oklch(0 0 0 / 14%);
+  --ring: oklch(0.52 0.13 165 / 45%);
+  --sidebar: oklch(0.975 0.003 260);
+  --course-mint: oklch(0.55 0.14 165);
+  --course-sky: oklch(0.5 0.13 230);
+  --course-amber: oklch(0.6 0.15 75);
+  --course-rose: oklch(0.55 0.18 15);
+  --course-violet: oklch(0.52 0.15 290);
+  --course-lime: oklch(0.58 0.16 125);
+  --grid-line: oklch(0 0 0 / 5%);
+  --gradient-glow: radial-gradient(60% 80% at 20% 0%, oklch(0.52 0.13 165 / 14%), transparent 70%);
+  --shadow-card: 0 1px 0 oklch(0 0 0 / 4%) inset, 0 10px 30px -15px oklch(0 0 0 / 18%);
+  --shadow-lift: 0 1px 0 oklch(0 0 0 / 6%) inset, 0 20px 40px -18px oklch(0 0 0 / 26%), 0 0 0 1px oklch(0.52 0.13 165 / 22%);
+}
+
 @layer base {
   * { border-color: var(--color-border); }
-  html { color-scheme: dark; }
+  :root { color-scheme: dark; }
+  :root.light { color-scheme: light; }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
-  ::selection { background: oklch(0.87 0.16 168 / 30%); }
+  ::selection { background: color-mix(in oklch, var(--color-primary) 30%, transparent); }
 }
 
 @utility card {
@@ -107,7 +148,7 @@
 }
 @utility glow-bg { background-image: var(--gradient-glow); }
 @utility grid-bg {
-  background-image: linear-gradient(oklch(1 0 0 / 3%) 1px, transparent 1px), linear-gradient(90deg, oklch(1 0 0 / 3%) 1px, transparent 1px);
+  background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 32px 32px;
   mask-image: radial-gradient(ellipse at top, black 30%, transparent 75%);
 }
@@ -119,7 +160,7 @@
 }
 @utility btn-primary {
   background: var(--color-primary); color: var(--color-primary-foreground);
-  box-shadow: 0 0 0 1px oklch(1 0 0 / 10%) inset, 0 8px 24px -10px oklch(0.87 0.16 168 / 60%);
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 10%) inset, 0 8px 24px -10px color-mix(in oklch, var(--color-primary) 55%, transparent);
   &:hover { filter: brightness(1.08); transform: translateY(-1px); }
 }
 @utility btn-ghost {

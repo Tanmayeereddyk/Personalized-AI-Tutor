@@ -23,6 +23,7 @@ from app.schemas.auth import (
     SessionResponse,
     SignupRequest,
     SignupResponse,
+    UpdateProfileRequest,
 )
 
 
@@ -32,8 +33,25 @@ def _auth_detail(exc: AuthError) -> str:
     return str(message) if message else "Authentication failed"
 
 
-def get_user_from_token(client: Client, token: str) -> AuthUser:
-    """Validate an access token with Supabase and return the user.
+def _profile_write_error(exc: PostgrestAPIError) -> HTTPException:
+    """Map a profiles-table write failure to a clear HTTP error.
+
+    A missing table is the only failure that re-running the schema fixes;
+    anything else (e.g. a foreign-key violation) is not a schema problem.
+    """
+    if getattr(exc, "code", None) in {"42P01", "PGRST205"}:
+        return HTTPException(
+            status_code=500,
+            detail="Could not create profile. Run database/schema.sql in Supabase first.",
+        )
+    return HTTPException(
+        status_code=500,
+        detail="Could not create your profile. Please try again.",
+    )
+
+
+def _raw_user(client: Client, token: str):
+    """Validate an access token with Supabase and return the raw auth user.
 
     Raises 401 if the token is missing, invalid, or expired.
     """
@@ -45,7 +63,13 @@ def get_user_from_token(client: Client, token: str) -> AuthUser:
     if response is None or response.user is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    return AuthUser(id=response.user.id, email=response.user.email)
+    return response.user
+
+
+def get_user_from_token(client: Client, token: str) -> AuthUser:
+    """Validate an access token with Supabase and return the user (id + email)."""
+    user = _raw_user(client, token)
+    return AuthUser(id=user.id, email=user.email)
 
 
 def signup(anon_client: Client, admin_client: Client, payload: SignupRequest) -> SignupResponse:
@@ -96,17 +120,7 @@ def signup(anon_client: Client, admin_client: Client, payload: SignupRequest) ->
             }
         ).execute()
     except PostgrestAPIError as exc:
-        # A missing table is the only failure that re-running the schema fixes;
-        # anything else (e.g. a foreign-key violation) is not a schema problem.
-        if getattr(exc, "code", None) in {"42P01", "PGRST205"}:
-            raise HTTPException(
-                status_code=500,
-                detail="Could not create profile. Run database/schema.sql in Supabase first.",
-            ) from exc
-        raise HTTPException(
-            status_code=500,
-            detail="Could not create your profile. Please try again.",
-        ) from exc
+        raise _profile_write_error(exc) from exc
 
     # With email confirmation enabled Supabase returns no session yet.
     if result.session is None:
@@ -162,6 +176,63 @@ def get_me(admin_client: Client, user: AuthUser) -> MeResponse:
 
     data = getattr(result, "data", None)
     profile = ProfileResponse.model_validate(data) if data else None
+    return MeResponse(user=user, profile=profile)
+
+
+def update_profile(
+    admin_client: Client, user: AuthUser, payload: UpdateProfileRequest
+) -> MeResponse:
+    """Update the authenticated user's profile (currently the display name).
+
+    Edits are scoped by the user id derived from the Bearer token, so an
+    account can only ever change its own profile row.
+    """
+    updates: dict = {}
+    if payload.full_name is not None:
+        stripped = payload.full_name.strip()
+        if stripped:
+            updates["full_name"] = stripped
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    try:
+        result = (
+            admin_client.table("profiles").update(updates).eq("id", user.id).execute()
+        )
+    except PostgrestAPIError as exc:
+        if getattr(exc, "code", None) in {"42P01", "PGRST205"}:
+            raise HTTPException(
+                status_code=500,
+                detail="Could not update profile. Run database/schema.sql in Supabase first.",
+            ) from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Could not update your profile. Please try again.",
+        ) from exc
+
+    data = getattr(result, "data", None)
+    if data:
+        profile = ProfileResponse.model_validate(data[0])
+        return MeResponse(user=user, profile=profile)
+
+    # No profile row exists yet (signup normally creates one) — create it so
+    # the edit is not silently lost.
+    try:
+        admin_client.table("profiles").upsert(
+            {"id": user.id, "email": user.email, **updates}
+        ).execute()
+    except PostgrestAPIError as exc:
+        if getattr(exc, "code", None) in {"42P01", "PGRST205"}:
+            raise HTTPException(
+                status_code=500,
+                detail="Could not update profile. Run database/schema.sql in Supabase first.",
+            ) from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Could not update your profile. Please try again.",
+        ) from exc
+
+    profile = ProfileResponse(id=user.id, email=user.email, full_name=updates["full_name"])
     return MeResponse(user=user, profile=profile)
 
 

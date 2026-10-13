@@ -24,6 +24,7 @@ from app.schemas.auth import (
     SessionResponse,
     SignupRequest,
     SignupResponse,
+    UpdateProfileRequest,
 )
 from app.services import auth_service
 
@@ -56,6 +57,16 @@ def me(
 ) -> MeResponse:
     """Return the logged-in user and their profile (requires Bearer token)."""
     return auth_service.get_me(admin_client, user)
+
+
+@router.put("/api/auth/profile", response_model=MeResponse)
+def update_profile(
+    payload: UpdateProfileRequest,
+    user: AuthUser = Depends(get_current_user),
+    admin_client: Client = Depends(get_service_supabase),
+) -> MeResponse:
+    """Update the logged-in user's profile (e.g. their display name)."""
+    return auth_service.update_profile(admin_client, user, payload)
 
 
 @router.post("/api/auth/logout", response_model=MessageResponse)

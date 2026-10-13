@@ -25,17 +25,3 @@ export function AuthCard({ title, subtitle, children, footer }: { title: string;
 export function FieldError({ msg }: { msg?: string | undefined }) {
   return msg ? <p className="mt-1.5 text-xs text-destructive">{msg}</p> : null;
 }
-
-export function GoogleButton({ onClick }: { onClick: () => void }) {
-  return (
-    <>
-      <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
-        <span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" />
-      </div>
-      <button type="button" onClick={onClick} className="btn btn-ghost w-full border">
-        <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden><path fill="currentColor" d="M21.35 11.1H12v2.98h5.35c-.23 1.45-1.66 4.25-5.35 4.25-3.22 0-5.85-2.67-5.85-5.96S8.78 6.4 12 6.4c1.83 0 3.06.78 3.76 1.45l2.57-2.47C16.68 3.85 14.55 2.9 12 2.9 6.98 2.9 2.9 6.98 2.9 12s4.08 9.1 9.1 9.1c5.25 0 8.74-3.69 8.74-8.89 0-.6-.07-1.05-.15-1.51Z" /></svg>
-        Continue with Google
-      </button>
-    </>
-  );
-}

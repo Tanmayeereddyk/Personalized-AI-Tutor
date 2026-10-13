@@ -46,6 +46,16 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class UpdateProfileRequest(BaseModel):
+    """Body for PUT /api/auth/profile.
+
+    Only the fields the user can edit through the UI are writable. The
+    email is owned by Supabase Auth and not changeable here.
+    """
+
+    full_name: str | None = Field(default=None, max_length=200)
+
+
 class AuthUser(BaseModel):
     """The authenticated user (validated from a Bearer token)."""
 

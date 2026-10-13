@@ -373,6 +373,13 @@ export const api = {
       const dto = await request<{ user: AuthUserDto; profile: ProfileDto | null }>("/api/auth/me");
       return toUser(dto.user, dto.profile);
     },
+    async updateProfile(fullName: string): Promise<User> {
+      const dto = await request<{ user: AuthUserDto; profile: ProfileDto | null }>(
+        "/api/auth/profile",
+        { method: "PUT", body: { full_name: fullName } },
+      );
+      return toUser(dto.user, dto.profile);
+    },
     async logout(): Promise<void> {
       try {
         await request("/api/auth/logout", { method: "POST" });
