@@ -11,7 +11,7 @@ import type {
   Assessment,
   CalendarEvent,
   Course,
-  FlashcardDeck,
+  Flashcard, FlashcardDeck,
   Material,
   Note,
   Quiz,
@@ -203,6 +203,16 @@ interface DeckDto {
   updated_at: string | null;
 }
 
+interface FlashcardDto {
+  id: string;
+  user_id: string;
+  deck_id: string;
+  front: string;
+  back: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 interface AssessmentDto {
   id: string;
   user_id: string;
@@ -308,6 +318,16 @@ export const toDeck = (dto: DeckDto): FlashcardDeck => ({
   topic: dto.topic,
   cards: dto.card_count,
   lastReviewed: friendlyDate(dto.updated_at),
+});
+
+export const toFlashcard = (dto: FlashcardDto): Flashcard => ({
+  id: dto.id,
+  deckId: dto.deck_id,
+  userId: dto.user_id,
+  front: dto.front,
+  back: dto.back,
+  createdAt: dto.created_at ?? '',
+  courseId: undefined,
 });
 
 export const toAssessment = (dto: AssessmentDto): Assessment => ({
@@ -484,6 +504,22 @@ export const api = {
       return toDeck(await request<DeckDto>(`/api/courses/${courseId}/flashcard-decks`, { method: "POST", body: input }));
     },
   },
+  flashcards: {
+    async list(deckId: string): Promise<Flashcard[]> {
+      const dto = await request<FlashcardDto[]>(`/api/decks/${deckId}/flashcards`);
+      return dto.map(toFlashcard);
+    },
+    async create(deckId: string, input: { front: string; back: string }): Promise<Flashcard> {
+      return toFlashcard(await request<FlashcardDto>(`/api/decks/${deckId}/flashcards`, { method: "POST", body: input }));
+    },
+    async update(id: string, input: { front?: string; back?: string }): Promise<Flashcard> {
+      return toFlashcard(await request<FlashcardDto>(`/api/flashcards/${id}`, { method: "PUT", body: input }));
+    },
+    async remove(id: string): Promise<void> {
+      await request(`/api/flashcards/${id}`, { method: "DELETE" });
+    },
+  },
+
   assessments: {
     async list(courseId: string): Promise<Assessment[]> {
       const dto = await request<AssessmentDto[]>(`/api/courses/${courseId}/assessments`);

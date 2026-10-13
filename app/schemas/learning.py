@@ -184,3 +184,25 @@ class BookmarkResponse(BaseModel):
     note: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
+
+
+# ------------------------------------------------------------------
+# FLASHCARDS (individual cards)
+# ------------------------------------------------------------------
+class FlashcardCreate(BaseModel):
+    front: str = Field(min_length=1, max_length=4000)
+    back: str = Field(min_length=1, max_length=4000)
+
+
+class FlashcardUpdate(BaseModel):
+    front: str | None = Field(default=None, min_length=1, max_length=4000)
+    back: str | None = Field(default=None, min_length=1, max_length=4000)
+
+
+class FlashcardResponse(BaseModel):
+    id: str
+    user_id: str
+    deck_id: str
+    front: str
+    back: str
+    created_at: str | None = None

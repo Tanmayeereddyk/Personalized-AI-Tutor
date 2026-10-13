@@ -29,6 +29,9 @@ from app.schemas.learning import (
     EventCreate,
     EventResponse,
     EventUpdate,
+    FlashcardCreate,
+    FlashcardResponse,
+    FlashcardUpdate,
     NoteCreate,
     NoteResponse,
     NoteUpdate,
@@ -209,3 +212,51 @@ bookmarks_router = _user_scoped_router(
     table="bookmarks", tag="bookmarks", segment="bookmarks",
     create_model=BookmarkCreate, update_model=BookmarkUpdate, response_model=BookmarkResponse,
 )
+
+def _flashcards_router() -> APIRouter:
+    router = APIRouter(tags=['flashcards'])
+    collection = '/api/decks/{deck_id}/flashcards'
+    item = '/api/flashcards/{item_id}'
+
+    @router.post(collection, response_model=FlashcardResponse, status_code=201, operation_id='flashcards_create')
+    def create_card(deck_id: str, payload: FlashcardCreate, user: AuthUser = Depends(get_current_user), db: Client = Depends(get_service_supabase)):
+        owned_service.ensure_deck_owned(db, user.id, deck_id)
+        values = payload.model_dump()
+        values['deck_id'] = deck_id
+        res = owned_service.create_item(db, user.id, 'flashcards', values)
+        try:
+            owned_service.update_deck_card_count(db, user.id, deck_id)
+        except Exception:
+            pass
+        return res
+
+    @router.get(collection, response_model=list[FlashcardResponse], operation_id='flashcards_list')
+    def list_cards(deck_id: str, user: AuthUser = Depends(get_current_user), db: Client = Depends(get_service_supabase)):
+        owned_service.ensure_deck_owned(db, user.id, deck_id)
+        return owned_service.list_items(db, user.id, 'flashcards', deck_id=deck_id, order_by='created_at')
+
+    @router.get(item, response_model=FlashcardResponse, operation_id='flashcards_get')
+    def get_card(item_id: str, user: AuthUser = Depends(get_current_user), db: Client = Depends(get_service_supabase)):
+        return owned_service.get_item(db, user.id, 'flashcards', item_id)
+
+    @router.put(item, response_model=FlashcardResponse, operation_id='flashcards_update')
+    def update_card(item_id: str, payload: FlashcardUpdate, user: AuthUser = Depends(get_current_user), db: Client = Depends(get_service_supabase)):
+        changes = payload.model_dump(exclude_unset=True)
+        return owned_service.update_item(db, user.id, 'flashcards', item_id, changes)
+
+    @router.delete(item, status_code=204, operation_id='flashcards_delete')
+    def delete_card(item_id: str, user: AuthUser = Depends(get_current_user), db: Client = Depends(get_service_supabase)) -> Response:
+        card = owned_service.get_item(db, user.id, 'flashcards', item_id)
+        deck_id = card.get('deck_id')
+        owned_service.delete_item(db, user.id, 'flashcards', item_id)
+        try:
+            if deck_id:
+                owned_service.update_deck_card_count(db, user.id, deck_id)
+        except Exception:
+            pass
+        return Response(status_code=204)
+
+    return router
+
+
+flashcards_router = _flashcards_router()

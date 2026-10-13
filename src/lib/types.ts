@@ -43,7 +43,15 @@ export interface Quiz {
 }
 
 export interface FlashcardDeck { id: string; courseId: string; topic: string; cards: number; lastReviewed: string }
-export interface Flashcard { front: string; back: string }
+export interface Flashcard {
+  id: string;
+  deckId: string;
+  userId: string;
+  front: string;
+  back: string;
+  createdAt: string;
+  courseId?: string | undefined;
+}
 
 export interface Assessment {
   id: string; courseId: string; name: string; topics: string[]; score: number; total: number; date: string; duration: string;

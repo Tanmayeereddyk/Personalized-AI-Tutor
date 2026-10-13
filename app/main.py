@@ -41,6 +41,7 @@ app.include_router(learning.decks_router)
 app.include_router(learning.assessments_router)
 app.include_router(learning.events_router)
 app.include_router(learning.bookmarks_router)
+app.include_router(learning.flashcards_router)
 
 
 @app.get("/", tags=["root"])
