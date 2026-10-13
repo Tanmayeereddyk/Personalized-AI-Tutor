@@ -22,4 +22,12 @@ describe("App routing", () => {
 
     expect(matches.at(-1)?.routeId).toBe(path);
   });
+
+  it("matches a dedicated page for /profile", () => {
+    const router = createRouter({ routeTree, context: { queryClient: new QueryClient() } });
+
+    const matches = router.matchRoutes("/profile");
+
+    expect(matches.at(-1)?.routeId).toBe("/profile");
+  });
 });

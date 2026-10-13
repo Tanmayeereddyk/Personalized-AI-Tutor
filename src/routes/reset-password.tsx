@@ -4,6 +4,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Label } from "@/components/ui/kit";
 import { AuthCard, FieldError } from "@/components/auth/AuthCard";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 
 export const Route = createFileRoute("/reset-password")({
   head: () => ({
@@ -226,26 +227,24 @@ export function ResetPasswordPage() {
         )}
         <div>
           <Label>New password</Label>
-          <input
-            type="password"
-            className="field"
+          <PasswordInput
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={setPassword}
             placeholder="At least 8 characters"
             autoComplete="new-password"
             autoFocus
+            invalid={!!errors.password}
           />
           <FieldError msg={errors.password} />
         </div>
         <div>
           <Label>Confirm password</Label>
-          <input
-            type="password"
-            className="field"
+          <PasswordInput
             value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
+            onChange={setConfirm}
             placeholder="Repeat password"
             autoComplete="new-password"
+            invalid={!!errors.confirm}
           />
           <FieldError msg={errors.confirm} />
         </div>

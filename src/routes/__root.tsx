@@ -14,9 +14,17 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { StoreProvider } from "../lib/store";
 import { AuthProvider, useAuth } from "../lib/auth";
+import { ThemeProvider, useTheme } from "../lib/theme";
 import { Toaster } from "../components/ui/sonner";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { AppShell } from "../components/layout/AppShell";
+
+/**
+ * Runs before first paint to apply the stored (or system) theme, so the page
+ * never flashes the wrong colors. Kept in sync with src/lib/theme.tsx: no
+ * stored value defaults to following the OS preference.
+ */
+const THEME_BOOTSTRAP = `(function(){try{var t=localStorage.getItem("studyai.theme");var d=t==="dark"||(!t&&window.matchMedia("(prefers-color-scheme: dark)").matches);var e=document.documentElement;e.classList.remove("light","dark");e.classList.add(d?"dark":"light");e.style.colorScheme=d?"dark":"light";}catch(err){document.documentElement.classList.add("dark")}})();`;
 
 function NotFoundComponent() {
   return (
@@ -107,9 +115,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
       </head>
       <body>
         {children}
@@ -119,18 +128,25 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function ThemedToaster() {
+  const { resolvedTheme } = useTheme();
+  return <Toaster theme={resolvedTheme} position="bottom-right" />;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <AuthProvider>
-        <StoreProvider>
-          <AuthGate />
-          <Toaster theme="dark" position="bottom-right" />
-        </StoreProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <StoreProvider>
+            <AuthGate />
+            <ThemedToaster />
+          </StoreProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

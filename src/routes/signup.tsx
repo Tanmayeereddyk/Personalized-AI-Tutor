@@ -1,10 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { toast } from "sonner";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Label } from "@/components/ui/kit";
-import { AuthCard, FieldError, GoogleButton } from "@/components/auth/AuthCard";
+import { AuthCard, FieldError } from "@/components/auth/AuthCard";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -86,13 +86,12 @@ function SignupPage() {
         {errors.form && <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errors.form}</div>}
         <div><Label>Full name</Label><input className="field" value={f.name} onChange={set("name")} placeholder="Your name" autoComplete="name" /><FieldError msg={errors.name} /></div>
         <div><Label>Email</Label><input type="email" className="field" value={f.email} onChange={set("email")} placeholder="you@example.com" autoComplete="email" /><FieldError msg={errors.email} /></div>
-        <div><Label>Password</Label><input type="password" className="field" value={f.password} onChange={set("password")} placeholder="At least 8 characters" autoComplete="new-password" /><FieldError msg={errors.password} /></div>
-        <div><Label>Confirm password</Label><input type="password" className="field" value={f.confirm} onChange={set("confirm")} placeholder="Repeat password" autoComplete="new-password" /><FieldError msg={errors.confirm} /></div>
+        <div><Label>Password</Label><PasswordInput value={f.password} onChange={(v) => setF({ ...f, password: v })} placeholder="At least 8 characters" autoComplete="new-password" invalid={!!errors.password} /><FieldError msg={errors.password} /></div>
+        <div><Label>Confirm password</Label><PasswordInput value={f.confirm} onChange={(v) => setF({ ...f, confirm: v })} placeholder="Repeat password" autoComplete="new-password" invalid={!!errors.confirm} /><FieldError msg={errors.confirm} /></div>
         <button type="submit" className="btn btn-primary w-full" disabled={busy}>
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}Create account
         </button>
       </form>
-      <GoogleButton onClick={() => toast("Google sign-up isn't available yet.")} />
     </AuthCard>
   );
 }

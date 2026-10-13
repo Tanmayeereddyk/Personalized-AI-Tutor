@@ -1,8 +1,9 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { LayoutGrid, Library, CalendarDays, Plus, Settings, Sparkles, User, Palette, LogOut, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, CalendarDays, LayoutGrid, Library, LogOut, Monitor, Moon, Plus, Settings, Sparkles, Sun, User } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
+import { useTheme, type ThemePreference } from "@/lib/theme";
 import { CourseBadge } from "@/components/ui/kit";
 import { cn } from "@/lib/utils";
 
@@ -12,13 +13,23 @@ const nav = [
   { to: "/calendar", label: "Calendar", icon: CalendarDays },
 ] as const;
 
+const themeOptions: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
+];
+
 /** compact = icon-only rail (tablet). */
 export function Sidebar({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
   const { courses, user, setAddCourseOpen } = useStore();
   const { logout } = useAuth();
+  const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const isActive = (to: string) => (to === "/" ? path === "/" : path === to);
+
+  const displayName = user.name.trim() || "Student";
+  const initial = (displayName[0] ?? "S").toUpperCase();
 
   const item = (active: boolean) =>
     cn(
@@ -72,12 +83,12 @@ export function Sidebar({ compact = false, onNavigate }: { compact?: boolean; on
         <DropdownMenu.Root>
           <DropdownMenu.Trigger className={cn(item(false), "w-full outline-none")}>
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-course-mint to-course-sky text-xs font-semibold text-primary-foreground">
-              {user.name[0]}
+              {initial}
             </span>
             {!compact && (
               <>
                 <span className="flex-1 text-left leading-tight">
-                  <span className="block text-sm text-foreground">{user.name}</span>
+                  <span className="block truncate text-sm text-foreground">{displayName}</span>
                   <span className="block text-xs text-muted-foreground">{user.role}</span>
                 </span>
                 <ChevronsUpDown className="h-3.5 w-3.5" />
@@ -87,21 +98,34 @@ export function Sidebar({ compact = false, onNavigate }: { compact?: boolean; on
           <DropdownMenu.Portal>
             <DropdownMenu.Content side="top" align="start" sideOffset={8} className="card z-50 w-56 bg-popover p-1.5 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95">
               <div className="px-2.5 py-2">
-                <div className="text-sm font-medium">{user.name}</div>
-                <div className="text-xs text-muted-foreground">{user.role}</div>
+                <div className="truncate text-sm font-medium">{displayName}</div>
+                <div className="truncate text-xs text-muted-foreground">{user.email || user.role}</div>
               </div>
               <DropdownMenu.Separator className="my-1 h-px bg-border" />
-              {[
-                { icon: User, label: "Profile", to: "/settings" },
-                { icon: Settings, label: "Settings", to: "/settings" },
-                { icon: Palette, label: "Theme", to: "/settings" },
-              ].map((o) => (
-                <DropdownMenu.Item key={o.label} asChild>
-                  <Link to={o.to} onClick={onNavigate} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground outline-none data-[highlighted]:bg-secondary data-[highlighted]:text-foreground">
-                    <o.icon className="h-4 w-4" />{o.label}
-                  </Link>
-                </DropdownMenu.Item>
-              ))}
+              <DropdownMenu.Item asChild>
+                <Link to="/profile" onClick={onNavigate} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground outline-none data-[highlighted]:bg-secondary data-[highlighted]:text-foreground">
+                  <User className="h-4 w-4" />Profile
+                </Link>
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              <DropdownMenu.Label className="px-2.5 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Theme
+              </DropdownMenu.Label>
+              <DropdownMenu.RadioGroup value={theme} onValueChange={(v) => setTheme(v as ThemePreference)}>
+                {themeOptions.map((o) => (
+                  <DropdownMenu.RadioItem
+                    key={o.value}
+                    value={o.value}
+                    className="relative flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 pl-9 text-sm text-muted-foreground outline-none data-[highlighted]:bg-secondary data-[highlighted]:text-foreground data-[state=checked]:text-foreground"
+                  >
+                    <o.icon className="absolute left-2.5 h-4 w-4" />
+                    {o.label}
+                    <DropdownMenu.ItemIndicator className="absolute right-2.5">
+                      <Check className="h-4 w-4 text-primary" />
+                    </DropdownMenu.ItemIndicator>
+                  </DropdownMenu.RadioItem>
+                ))}
+              </DropdownMenu.RadioGroup>
               <DropdownMenu.Separator className="my-1 h-px bg-border" />
               <DropdownMenu.Item onSelect={() => { void logout().finally(() => { onNavigate?.(); navigate({ to: "/login" }); }); }} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-destructive outline-none data-[highlighted]:bg-secondary">
                 <LogOut className="h-4 w-4" />Log out
