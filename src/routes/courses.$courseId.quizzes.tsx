@@ -1,10 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { ListChecks, Plus, Loader2 } from "lucide-react";
+import { ListChecks, Plus, Loader2, Sparkles, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { useCreateQuiz, useQuizzes } from "@/lib/queries";
 import { EmptyState, Modal, PageHeader } from "@/components/ui/kit";
 import { Field, PillGroup, scoreBorder, scoreTone } from "@/components/practice/Builder";
+import { QuizBuilder, type QuizStartInput } from "@/components/practice/QuizBuilder";
+import { QuizRunner } from "@/components/practice/QuizRunner";
+import { buildMockQuiz, type MockQuiz } from "@/lib/quiz-mock";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/courses/$courseId/quizzes")({
@@ -13,13 +16,29 @@ export const Route = createFileRoute("/courses/$courseId/quizzes")({
 
 const blankQuiz = { name: "", topic: "", difficulty: "Medium", score: "0", total: "0" };
 
-function Quizzes() {
+export function Quizzes() {
   const { courseId } = Route.useParams();
   const quizzes = useQuizzes(courseId);
   const create = useCreateQuiz(courseId);
   const list = quizzes.data ?? [];
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(blankQuiz);
+
+  // The generated quiz lives in local state only; nothing is persisted.
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [session, setSession] = useState<MockQuiz | null>(null);
+
+  const startQuiz = ({ material, config }: QuizStartInput) => {
+    setSession(
+      buildMockQuiz({
+        courseId,
+        materialId: material.id,
+        materialName: material.name,
+        config,
+      }),
+    );
+    setBuilderOpen(false);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,8 +64,22 @@ function Quizzes() {
 
   return (
     <div>
-      <PageHeader title="Quizzes" subtitle="Short, topic-level practice to sharpen weak spots."
-        action={<button className="btn btn-primary" onClick={() => setOpen(true)}><Plus className="h-4 w-4" />Create Quiz</button>} />
+      <PageHeader
+        title="Quizzes"
+        subtitle="Generate practice from your materials, or log an attempt after class."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="btn btn-ghost" onClick={() => setOpen(true)}>
+              <ClipboardList className="h-4 w-4" />
+              Record attempt
+            </button>
+            <button className="btn btn-primary" onClick={() => setBuilderOpen(true)}>
+              <Sparkles className="h-4 w-4" />
+              Generate Quiz
+            </button>
+          </div>
+        }
+      />
 
       {quizzes.isLoading ? (
         <div className="card px-6 py-16 text-center text-sm text-muted-foreground">Loading quizzes…</div>
@@ -57,8 +90,8 @@ function Quizzes() {
           <button className="btn btn-primary mt-5" onClick={() => quizzes.refetch()}>Try again</button>
         </div>
       ) : list.length === 0 ? (
-        <EmptyState icon={ListChecks} title="No quizzes attempted yet." body="Record a quiz attempt to track your score and spot weak spots."
-          action={<button className="btn btn-primary" onClick={() => setOpen(true)}>Create Quiz</button>} />
+        <EmptyState icon={ListChecks} title="No quizzes attempted yet." body="Generate a practice quiz from your materials, or record an attempt to track your score."
+          action={<button className="btn btn-primary" onClick={() => setBuilderOpen(true)}><Sparkles className="h-4 w-4" />Generate Quiz</button>} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {list.map((q, i) => {
@@ -108,6 +141,22 @@ function Quizzes() {
           </div>
         </form>
       </Modal>
+
+      {/* Quiz generation flow: choose a material, configure, then take it. */}
+      <QuizBuilder
+        open={builderOpen}
+        onOpenChange={setBuilderOpen}
+        courseId={courseId}
+        onStart={startQuiz}
+      />
+
+      {session ? (
+        <QuizRunner
+          key={session.id}
+          quiz={session}
+          onExit={() => setSession(null)}
+        />
+      ) : null}
     </div>
   );
 }
