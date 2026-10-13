@@ -34,6 +34,18 @@ def _auth_detail(exc: AuthError) -> str:
     return str(message) if message else "Authentication failed"
 
 
+def _session_response(result) -> SessionResponse:
+    """Build a SessionResponse (access + refresh token) from a Supabase result."""
+    session = result.session
+    user = result.user
+    return SessionResponse(
+        access_token=session.access_token,
+        refresh_token=session.refresh_token,
+        token_type=session.token_type or "bearer",
+        user=AuthUser(id=user.id, email=user.email),
+    )
+
+
 def _profile_write_error(exc: PostgrestAPIError) -> HTTPException:
     """Map a profiles-table write failure to a clear HTTP error.
 
