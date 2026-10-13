@@ -229,28 +229,46 @@ export const useCreateDeck = (courseId: string) => {
   });
 };
 
-export const useAssessments = (courseId: string) => {
+export const useFlashcards = (deckId: string) => {
   const { user } = useAuth();
   return useQuery({
-    queryKey: ["assessments", user?.id, courseId],
-    queryFn: () => api.assessments.list(courseId),
-    enabled: !!user && !!courseId,
+    queryKey: ["flashcards", user?.id, deckId],
+    queryFn: () => api.flashcards.list(deckId),
+    enabled: !!user && !!deckId,
   });
 };
 
-export const useCreateAssessment = (courseId: string) => {
+export const useCreateFlashcard = (deckId: string) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: {
-      name: string;
-      topics?: string[];
-      score?: number;
-      total?: number;
-      duration_minutes?: number;
-    }) => api.assessments.create(courseId, input),
+    mutationFn: (input: { front: string; back: string }) => api.flashcards.create(deckId, input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["assessments", user?.id, courseId] });
+      queryClient.invalidateQueries({ queryKey: ["flashcards", user?.id, deckId] });
+      queryClient.invalidateQueries({ queryKey: ["flashcard-decks", user?.id] });
+    },
+  });
+};
+
+export const useUpdateFlashcard = (deckId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: { front?: string; back?: string } }) => api.flashcards.update(id, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["flashcards", user?.id, deckId] });
+    },
+  });
+};
+
+export const useDeleteFlashcard = (deckId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.flashcards.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["flashcards", user?.id, deckId] });
+      queryClient.invalidateQueries({ queryKey: ["flashcard-decks", user?.id] });
     },
   });
 };

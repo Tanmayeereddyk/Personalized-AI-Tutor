@@ -20,7 +20,7 @@ class Settings:
 
     APP_NAME: str = os.getenv("APP_NAME", "StudyAI Backend")
     APP_ENV: str = os.getenv("APP_ENV", "development")
-    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:8080")
 
     # Supabase (never hardcode keys — they live in .env, which Git ignores)
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")

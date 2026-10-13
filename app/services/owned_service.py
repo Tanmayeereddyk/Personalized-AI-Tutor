@@ -5,8 +5,7 @@ token, never from the request body) and adds ``.eq("user_id", user_id)``
 to the query. A record that belongs to somebody else simply does not
 match, so it is reported as 404 — the same as a record that does not
 exist. This is the single place the ownership rule is implemented, so
-notes, quizzes, decks, assessments, events and bookmarks all behave the
-same way.
+notes, quizzes, decks, events and bookmarks all behave the same way.
 """
 
 from fastapi import HTTPException
@@ -48,12 +47,15 @@ def list_items(
     table: str,
     *,
     course_id: str | None = None,
+    deck_id: str | None = None,
     order_by: str = "created_at",
 ) -> list[dict]:
-    """Return only the current user's rows (optionally for one course)."""
+    """Return only the current user's rows (optionally for one course/deck)."""
     query = client.table(table).select("*").eq("user_id", user_id)
     if course_id is not None:
         query = query.eq("course_id", course_id)
+    if deck_id is not None:
+        query = query.eq("deck_id", deck_id)
     try:
         result = query.order(order_by, desc=True).execute()
     except PostgrestAPIError as exc:
@@ -132,3 +134,36 @@ def delete_item(client: Client, user_id: str, table: str, item_id: str) -> None:
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Not found")
+
+def ensure_deck_owned(client, user_id, deck_id):
+    try:
+        result = client.table("flashcard_decks").select("id,user_id,course_id").eq("id",deck_id).eq("user_id",user_id).maybe_single().execute()
+    except Exception as exc:
+        from fastapi import HTTPException
+        from supabase import PostgrestAPIError
+        if isinstance(exc, PostgrestAPIError):
+            raise HTTPException(status_code=500, detail="Database error. Run database/schema.sql in Supabase first.") from exc
+        raise
+    if getattr(result,"data",None) is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return result.data
+
+def update_deck_card_count(client, user_id, deck_id):
+    try:
+        cnt = client.table("flashcards").select("id", count="exact").eq("user_id",user_id).eq("deck_id",deck_id).execute()
+        count = getattr(cnt,"count",0) or (len(cnt.data or []))
+    except Exception as exc:
+        from fastapi import HTTPException
+        from supabase import PostgrestAPIError
+        if isinstance(exc, PostgrestAPIError):
+            raise HTTPException(status_code=500, detail="Database error. Run database/schema.sql in Supabase first.") from exc
+        raise
+    try:
+        client.table("flashcard_decks").update({"card_count": count}).eq("id",deck_id).eq("user_id",user_id).execute()
+    except Exception as exc:
+        from fastapi import HTTPException
+        from supabase import PostgrestAPIError
+        if isinstance(exc, PostgrestAPIError):
+            raise HTTPException(status_code=500, detail="Database error. Run database/schema.sql in Supabase first.") from exc
+        raise

@@ -96,38 +96,6 @@ class DeckResponse(BaseModel):
 
 
 # ------------------------------------------------------------------
-# ASSESSMENTS
-# ------------------------------------------------------------------
-class AssessmentCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=300)
-    topics: list[str] = Field(default_factory=list)
-    score: int = Field(default=0, ge=0)
-    total: int = Field(default=0, ge=0)
-    duration_minutes: int = Field(default=0, ge=0)
-
-
-class AssessmentUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=300)
-    topics: list[str] | None = None
-    score: int | None = Field(default=None, ge=0)
-    total: int | None = Field(default=None, ge=0)
-    duration_minutes: int | None = Field(default=None, ge=0)
-
-
-class AssessmentResponse(BaseModel):
-    id: str
-    user_id: str
-    course_id: str
-    name: str
-    topics: list[str] = Field(default_factory=list)
-    score: int = 0
-    total: int = 0
-    duration_minutes: int = 0
-    created_at: str | None = None
-    updated_at: str | None = None
-
-
-# ------------------------------------------------------------------
 # CALENDAR EVENTS
 # ------------------------------------------------------------------
 class EventCreate(BaseModel):
@@ -190,3 +158,25 @@ class BookmarkResponse(BaseModel):
     note: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
+
+
+# ------------------------------------------------------------------
+# FLASHCARDS (individual cards)
+# ------------------------------------------------------------------
+class FlashcardCreate(BaseModel):
+    front: str = Field(min_length=1, max_length=4000)
+    back: str = Field(min_length=1, max_length=4000)
+
+
+class FlashcardUpdate(BaseModel):
+    front: str | None = Field(default=None, min_length=1, max_length=4000)
+    back: str | None = Field(default=None, min_length=1, max_length=4000)
+
+
+class FlashcardResponse(BaseModel):
+    id: str
+    user_id: str
+    deck_id: str
+    front: str
+    back: str
+    created_at: str | None = None

@@ -1,11 +1,11 @@
-"""Per-user learning data: notes, quizzes, decks, assessments, events, bookmarks.
+"""Per-user learning data: notes, quizzes, decks, events, bookmarks.
 
 Each resource is exposed through a small router built from the shared
 ownership-safe CRUD in ``app.services.owned_service``. Because every
 query filters by the authenticated user id, two different users can never
 see or modify each other's rows — even when they know a record id.
 
-Course-scoped resources (notes, quizzes, decks, assessments) live under
+Course-scoped resources (notes, quizzes, decks) live under
 ``/api/courses/<course_id>/<segment>`` so creating one also checks that
 the course belongs to the caller. Personal resources (calendar events,
 bookmarks) live at ``/api/<segment>``.
@@ -17,9 +17,6 @@ from supabase import Client
 from app.api.dependencies import get_current_user, get_service_supabase
 from app.schemas.auth import AuthUser
 from app.schemas.learning import (
-    AssessmentCreate,
-    AssessmentResponse,
-    AssessmentUpdate,
     BookmarkCreate,
     BookmarkResponse,
     BookmarkUpdate,
@@ -29,6 +26,9 @@ from app.schemas.learning import (
     EventCreate,
     EventResponse,
     EventUpdate,
+    FlashcardCreate,
+    FlashcardResponse,
+    FlashcardUpdate,
     NoteCreate,
     NoteResponse,
     NoteUpdate,
@@ -197,10 +197,6 @@ decks_router = _course_scoped_router(
     table="flashcard_decks", tag="flashcard-decks", segment="flashcard-decks",
     create_model=DeckCreate, update_model=DeckUpdate, response_model=DeckResponse,
 )
-assessments_router = _course_scoped_router(
-    table="assessments", tag="assessments", segment="assessments",
-    create_model=AssessmentCreate, update_model=AssessmentUpdate, response_model=AssessmentResponse,
-)
 events_router = _user_scoped_router(
     table="calendar_events", tag="calendar-events", segment="calendar-events",
     create_model=EventCreate, update_model=EventUpdate, response_model=EventResponse,
@@ -209,3 +205,51 @@ bookmarks_router = _user_scoped_router(
     table="bookmarks", tag="bookmarks", segment="bookmarks",
     create_model=BookmarkCreate, update_model=BookmarkUpdate, response_model=BookmarkResponse,
 )
+
+def _flashcards_router() -> APIRouter:
+    router = APIRouter(tags=['flashcards'])
+    collection = '/api/decks/{deck_id}/flashcards'
+    item = '/api/flashcards/{item_id}'
+
+    @router.post(collection, response_model=FlashcardResponse, status_code=201, operation_id='flashcards_create')
+    def create_card(deck_id: str, payload: FlashcardCreate, user: AuthUser = Depends(get_current_user), db: Client = Depends(get_service_supabase)):
+        owned_service.ensure_deck_owned(db, user.id, deck_id)
+        values = payload.model_dump()
+        values['deck_id'] = deck_id
+        res = owned_service.create_item(db, user.id, 'flashcards', values)
+        try:
+            owned_service.update_deck_card_count(db, user.id, deck_id)
+        except Exception:
+            pass
+        return res
+
+    @router.get(collection, response_model=list[FlashcardResponse], operation_id='flashcards_list')
+    def list_cards(deck_id: str, user: AuthUser = Depends(get_current_user), db: Client = Depends(get_service_supabase)):
+        owned_service.ensure_deck_owned(db, user.id, deck_id)
+        return owned_service.list_items(db, user.id, 'flashcards', deck_id=deck_id, order_by='created_at')
+
+    @router.get(item, response_model=FlashcardResponse, operation_id='flashcards_get')
+    def get_card(item_id: str, user: AuthUser = Depends(get_current_user), db: Client = Depends(get_service_supabase)):
+        return owned_service.get_item(db, user.id, 'flashcards', item_id)
+
+    @router.put(item, response_model=FlashcardResponse, operation_id='flashcards_update')
+    def update_card(item_id: str, payload: FlashcardUpdate, user: AuthUser = Depends(get_current_user), db: Client = Depends(get_service_supabase)):
+        changes = payload.model_dump(exclude_unset=True)
+        return owned_service.update_item(db, user.id, 'flashcards', item_id, changes)
+
+    @router.delete(item, status_code=204, operation_id='flashcards_delete')
+    def delete_card(item_id: str, user: AuthUser = Depends(get_current_user), db: Client = Depends(get_service_supabase)) -> Response:
+        card = owned_service.get_item(db, user.id, 'flashcards', item_id)
+        deck_id = card.get('deck_id')
+        owned_service.delete_item(db, user.id, 'flashcards', item_id)
+        try:
+            if deck_id:
+                owned_service.update_deck_card_count(db, user.id, deck_id)
+        except Exception:
+            pass
+        return Response(status_code=204)
+
+    return router
+
+
+flashcards_router = _flashcards_router()

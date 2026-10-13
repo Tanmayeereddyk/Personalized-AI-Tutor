@@ -13,13 +13,13 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as CoursesIndexRouteImport } from './routes/courses.index'
 import { Route as CoursesCourseIdRouteImport } from './routes/courses.$courseId'
 import { Route as CoursesCourseIdIndexRouteImport } from './routes/courses.$courseId.index'
-import { Route as CoursesCourseIdAssessmentsRouteImport } from './routes/courses.$courseId.assessments'
 import { Route as CoursesCourseIdFlashcardsRouteImport } from './routes/courses.$courseId.flashcards'
 import { Route as CoursesCourseIdMaterialsRouteImport } from './routes/courses.$courseId.materials'
 import { Route as CoursesCourseIdNotesRouteImport } from './routes/courses.$courseId.notes'
@@ -46,6 +46,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -78,12 +83,6 @@ const CoursesCourseIdIndexRoute = CoursesCourseIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => CoursesCourseIdRoute,
 } as any)
-const CoursesCourseIdAssessmentsRoute =
-  CoursesCourseIdAssessmentsRouteImport.update({
-    id: '/assessments',
-    path: '/assessments',
-    getParentRoute: () => CoursesCourseIdRoute,
-  } as any)
 const CoursesCourseIdFlashcardsRoute =
   CoursesCourseIdFlashcardsRouteImport.update({
     id: '/flashcards',
@@ -127,12 +126,12 @@ export interface FileRoutesByFullPath {
   '/calendar': typeof CalendarRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
+  '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/courses/$courseId': typeof CoursesCourseIdRouteWithChildren
   '/courses/': typeof CoursesIndexRoute
-  '/courses/$courseId/assessments': typeof CoursesCourseIdAssessmentsRoute
   '/courses/$courseId/flashcards': typeof CoursesCourseIdFlashcardsRoute
   '/courses/$courseId/materials': typeof CoursesCourseIdMaterialsRoute
   '/courses/$courseId/notes': typeof CoursesCourseIdNotesRoute
@@ -147,11 +146,11 @@ export interface FileRoutesByTo {
   '/calendar': typeof CalendarRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
+  '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/courses': typeof CoursesIndexRoute
-  '/courses/$courseId/assessments': typeof CoursesCourseIdAssessmentsRoute
   '/courses/$courseId/flashcards': typeof CoursesCourseIdFlashcardsRoute
   '/courses/$courseId/materials': typeof CoursesCourseIdMaterialsRoute
   '/courses/$courseId/notes': typeof CoursesCourseIdNotesRoute
@@ -167,12 +166,12 @@ export interface FileRoutesById {
   '/calendar': typeof CalendarRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
+  '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/courses/$courseId': typeof CoursesCourseIdRouteWithChildren
   '/courses/': typeof CoursesIndexRoute
-  '/courses/$courseId/assessments': typeof CoursesCourseIdAssessmentsRoute
   '/courses/$courseId/flashcards': typeof CoursesCourseIdFlashcardsRoute
   '/courses/$courseId/materials': typeof CoursesCourseIdMaterialsRoute
   '/courses/$courseId/notes': typeof CoursesCourseIdNotesRoute
@@ -189,12 +188,12 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/forgot-password'
     | '/login'
+    | '/profile'
     | '/reset-password'
     | '/settings'
     | '/signup'
     | '/courses/$courseId'
     | '/courses/'
-    | '/courses/$courseId/assessments'
     | '/courses/$courseId/flashcards'
     | '/courses/$courseId/materials'
     | '/courses/$courseId/notes'
@@ -209,11 +208,11 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/forgot-password'
     | '/login'
+    | '/profile'
     | '/reset-password'
     | '/settings'
     | '/signup'
     | '/courses'
-    | '/courses/$courseId/assessments'
     | '/courses/$courseId/flashcards'
     | '/courses/$courseId/materials'
     | '/courses/$courseId/notes'
@@ -228,12 +227,12 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/forgot-password'
     | '/login'
+    | '/profile'
     | '/reset-password'
     | '/settings'
     | '/signup'
     | '/courses/$courseId'
     | '/courses/'
-    | '/courses/$courseId/assessments'
     | '/courses/$courseId/flashcards'
     | '/courses/$courseId/materials'
     | '/courses/$courseId/notes'
@@ -249,6 +248,7 @@ export interface RootRouteChildren {
   CalendarRoute: typeof CalendarRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
+  ProfileRoute: typeof ProfileRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
   SignupRoute: typeof SignupRoute
@@ -284,6 +284,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -326,13 +333,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/courses/$courseId/'
       preLoaderRoute: typeof CoursesCourseIdIndexRouteImport
-      parentRoute: typeof CoursesCourseIdRoute
-    }
-    '/courses/$courseId/assessments': {
-      id: '/courses/$courseId/assessments'
-      path: '/assessments'
-      fullPath: '/courses/$courseId/assessments'
-      preLoaderRoute: typeof CoursesCourseIdAssessmentsRouteImport
       parentRoute: typeof CoursesCourseIdRoute
     }
     '/courses/$courseId/flashcards': {
@@ -388,7 +388,6 @@ declare module '@tanstack/react-router' {
 }
 
 interface CoursesCourseIdRouteChildren {
-  CoursesCourseIdAssessmentsRoute: typeof CoursesCourseIdAssessmentsRoute
   CoursesCourseIdFlashcardsRoute: typeof CoursesCourseIdFlashcardsRoute
   CoursesCourseIdMaterialsRoute: typeof CoursesCourseIdMaterialsRoute
   CoursesCourseIdNotesRoute: typeof CoursesCourseIdNotesRoute
@@ -400,7 +399,6 @@ interface CoursesCourseIdRouteChildren {
 }
 
 const CoursesCourseIdRouteChildren: CoursesCourseIdRouteChildren = {
-  CoursesCourseIdAssessmentsRoute: CoursesCourseIdAssessmentsRoute,
   CoursesCourseIdFlashcardsRoute: CoursesCourseIdFlashcardsRoute,
   CoursesCourseIdMaterialsRoute: CoursesCourseIdMaterialsRoute,
   CoursesCourseIdNotesRoute: CoursesCourseIdNotesRoute,
@@ -420,6 +418,7 @@ const rootRouteChildren: RootRouteChildren = {
   CalendarRoute: CalendarRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
+  ProfileRoute: ProfileRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
   SignupRoute: SignupRoute,

@@ -163,9 +163,12 @@ class FakeQuery:
         self._desc = False
         self._order_column: str | None = None
         self._error: Exception | None = None
+        self._count = None
 
     # -- builders -------------------------------------------------
-    def select(self, *columns: str) -> "FakeQuery":
+    def select(self, *columns: str, **kwargs) -> "FakeQuery":
+        if "count" in kwargs:
+            self._count = kwargs["count"]
         return self
 
     def insert(self, values: dict | list[dict]) -> "FakeQuery":
@@ -296,7 +299,13 @@ class FakeQuery:
         if self._single:
             data = data[0] if data else None
 
-        return SimpleNamespace(data=data)
+        result = SimpleNamespace(data=data)
+        if self._count is not None:
+            try:
+                result.count = len([r for r in self._rows if self._matches(r)]) if self._op == "select" else len(data)
+            except Exception:
+                result.count = len(data) if hasattr(data, "__len__") else 0
+        return result
 
 
 class _NegatedFilter:

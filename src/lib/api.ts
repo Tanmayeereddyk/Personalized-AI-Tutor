@@ -8,15 +8,11 @@
  */
 
 import type {
-  Assessment,
   CalendarEvent,
   Citation,
   CitationKind,
   Course,
-  ExtractedUnit,
-  ExtractionStatus,
-  FlashcardDeck,
-  IndexStatus,
+  Flashcard, FlashcardDeck,
   Material,
   MaterialChunk,
   Note,
@@ -427,15 +423,12 @@ interface DeckDto {
   updated_at: string | null;
 }
 
-interface AssessmentDto {
+interface FlashcardDto {
   id: string;
   user_id: string;
-  course_id: string;
-  name: string;
-  topics: string[];
-  score: number;
-  total: number;
-  duration_minutes: number;
+  deck_id: string;
+  front: string;
+  back: string;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -616,15 +609,14 @@ export const toDeck = (dto: DeckDto): FlashcardDeck => ({
   lastReviewed: friendlyDate(dto.updated_at),
 });
 
-export const toAssessment = (dto: AssessmentDto): Assessment => ({
+export const toFlashcard = (dto: FlashcardDto): Flashcard => ({
   id: dto.id,
-  courseId: dto.course_id,
-  name: dto.name,
-  topics: dto.topics ?? [],
-  score: dto.score,
-  total: dto.total,
-  date: friendlyDate(dto.created_at),
-  duration: dto.duration_minutes ? `${dto.duration_minutes} min` : "—",
+  deckId: dto.deck_id,
+  userId: dto.user_id,
+  front: dto.front,
+  back: dto.back,
+  createdAt: dto.created_at ?? '',
+  courseId: undefined,
 });
 
 export const toEvent = (dto: EventDto): CalendarEvent => ({
@@ -694,6 +686,13 @@ export const api = {
     },
     async me(): Promise<User> {
       const dto = await request<{ user: AuthUserDto; profile: ProfileDto | null }>("/api/auth/me");
+      return toUser(dto.user, dto.profile);
+    },
+    async updateProfile(fullName: string): Promise<User> {
+      const dto = await request<{ user: AuthUserDto; profile: ProfileDto | null }>(
+        "/api/auth/profile",
+        { method: "PUT", body: { full_name: fullName } },
+      );
       return toUser(dto.user, dto.profile);
     },
     async logout(): Promise<void> {
@@ -953,27 +952,19 @@ export const api = {
       );
     },
   },
-  assessments: {
-    async list(courseId: string): Promise<Assessment[]> {
-      const dto = await request<AssessmentDto[]>(`/api/courses/${courseId}/assessments`);
-      return dto.map(toAssessment);
+  flashcards: {
+    async list(deckId: string): Promise<Flashcard[]> {
+      const dto = await request<FlashcardDto[]>(`/api/decks/${deckId}/flashcards`);
+      return dto.map(toFlashcard);
     },
-    async create(
-      courseId: string,
-      input: {
-        name: string;
-        topics?: string[];
-        score?: number;
-        total?: number;
-        duration_minutes?: number;
-      },
-    ): Promise<Assessment> {
-      return toAssessment(
-        await request<AssessmentDto>(`/api/courses/${courseId}/assessments`, {
-          method: "POST",
-          body: input,
-        }),
-      );
+    async create(deckId: string, input: { front: string; back: string }): Promise<Flashcard> {
+      return toFlashcard(await request<FlashcardDto>(`/api/decks/${deckId}/flashcards`, { method: "POST", body: input }));
+    },
+    async update(id: string, input: { front?: string; back?: string }): Promise<Flashcard> {
+      return toFlashcard(await request<FlashcardDto>(`/api/flashcards/${id}`, { method: "PUT", body: input }));
+    },
+    async remove(id: string): Promise<void> {
+      await request(`/api/flashcards/${id}`, { method: "DELETE" });
     },
   },
 

@@ -1,10 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Label } from "@/components/ui/kit";
-import { AuthCard, FieldError, GoogleButton } from "@/components/auth/AuthCard";
+import { AuthCard, FieldError } from "@/components/auth/AuthCard";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -84,13 +84,12 @@ function LoginPage() {
               Forgot password?
             </Link>
           </div>
-          <input
-            type="password"
-            className="field"
+          <PasswordInput
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={setPassword}
             placeholder="••••••••"
             autoComplete="current-password"
+            invalid={!!errors.password}
           />
           <FieldError msg={errors.password} />
         </div>
@@ -98,7 +97,6 @@ function LoginPage() {
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}Log in
         </button>
       </form>
-      <GoogleButton onClick={() => toast("Google sign-in isn't available yet.")} />
     </AuthCard>
   );
 }

@@ -23,6 +23,7 @@ AUTH_PATHS = {
     "/api/auth/login",
     "/api/auth/refresh",
     "/api/auth/me",
+    "/api/auth/profile",
     "/api/auth/logout",
     "/api/auth/forgot-password",
     "/api/auth/reset-password",
@@ -234,6 +235,87 @@ def test_me_returns_user_and_profile(client) -> None:
     data = response.json()
     assert data["user"]["email"] == "ada@example.com"
     assert data["profile"]["full_name"] == "Ada"
+
+
+# ---------------------------------------------------------------
+# Update profile
+# ---------------------------------------------------------------
+def test_update_profile_requires_authentication(client) -> None:
+    assert (
+        client.put("/api/auth/profile", json={"full_name": "Ada"}).status_code == 401
+    )
+
+
+def test_update_profile_updates_full_name(client, fake_supabase) -> None:
+    _, headers = create_user(fake_supabase, email="ada@example.com")
+    response = client.put(
+        "/api/auth/profile", headers=headers, json={"full_name": "Ada Lovelace"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["profile"]["full_name"] == "Ada Lovelace"
+
+    # The change is persisted and visible through /me.
+    rows = fake_supabase.tables["profiles"]
+    assert rows and rows[0]["full_name"] == "Ada Lovelace"
+    me = client.get("/api/auth/me", headers=headers).json()
+    assert me["profile"]["full_name"] == "Ada Lovelace"
+
+
+def test_update_profile_trims_whitespace(client, fake_supabase) -> None:
+    _, headers = create_user(fake_supabase, email="ada@example.com")
+    response = client.put(
+        "/api/auth/profile", headers=headers, json={"full_name": "  Ada  "}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["profile"]["full_name"] == "Ada"
+
+
+def test_update_profile_with_nothing_to_update_is_400(client, fake_supabase) -> None:
+    _, headers = create_user(fake_supabase, email="ada@example.com")
+    client.put(
+        "/api/auth/profile", headers=headers, json={"full_name": "Ada"}
+    )
+    response = client.put(
+        "/api/auth/profile", headers=headers, json={"full_name": "   "}
+    )
+
+    assert response.status_code == 400
+    assert "nothing to update" in response.json()["detail"].lower()
+
+
+def test_update_profile_creates_missing_profile_row(client, fake_supabase) -> None:
+    """Editing a profile with no row yet (signup normally writes one) works."""
+    _, headers = create_user(fake_supabase, email="ada@example.com")
+    assert fake_supabase.tables.get("profiles", []) == []
+
+    response = client.put(
+        "/api/auth/profile", headers=headers, json={"full_name": "Ada"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["profile"]["full_name"] == "Ada"
+    assert fake_supabase.tables["profiles"][0]["full_name"] == "Ada"
+
+
+def test_update_profile_missing_table_points_at_the_schema(client, fake_supabase) -> None:
+    fake_supabase.table_errors["profiles"] = PostgrestAPIError(
+        {
+            "message": "Could not find the table 'public.profiles'",
+            "code": "PGRST205",
+            "details": "",
+            "hint": "",
+        }
+    )
+    _, headers = create_user(fake_supabase, email="ada@example.com")
+    response = client.put(
+        "/api/auth/profile", headers=headers, json={"full_name": "Ada"}
+    )
+
+    assert response.status_code == 500
+    assert "schema.sql" in response.json()["detail"]
 
 
 # ---------------------------------------------------------------

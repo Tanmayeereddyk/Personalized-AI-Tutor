@@ -200,22 +200,6 @@ create table if not exists public.flashcards (
 );
 
 -- ------------------------------------------------------------
--- ASSESSMENTS
--- ------------------------------------------------------------
-create table if not exists public.assessments (
-    id               uuid primary key default gen_random_uuid(),
-    user_id          uuid not null references auth.users (id) on delete cascade,
-    course_id        uuid not null references public.courses (id) on delete cascade,
-    name             text not null,
-    topics           text[] not null default '{}',
-    score            integer not null default 0,
-    total            integer not null default 0,
-    duration_minutes integer not null default 0,
-    created_at       timestamptz not null default now(),
-    updated_at       timestamptz not null default now()
-);
-
--- ------------------------------------------------------------
 -- CALENDAR EVENTS: personal study schedule
 -- ------------------------------------------------------------
 create table if not exists public.calendar_events (
@@ -282,7 +266,6 @@ create index if not exists progress_user_idx            on public.learning_progr
 create index if not exists quizzes_user_idx             on public.quizzes (user_id, course_id);
 create index if not exists decks_user_idx               on public.flashcard_decks (user_id, course_id);
 create index if not exists flashcards_user_idx          on public.flashcards (user_id, deck_id);
-create index if not exists assessments_user_idx         on public.assessments (user_id, course_id);
 create index if not exists calendar_user_idx            on public.calendar_events (user_id, event_date);
 create index if not exists conversations_user_idx       on public.tutor_conversations (user_id, course_id);
 create index if not exists messages_user_idx            on public.tutor_messages (user_id, conversation_id);
@@ -310,8 +293,7 @@ declare
     tables text[] := array[
         'profiles', 'courses', 'materials', 'notes', 'topics', 'modules',
         'lessons', 'learning_progress', 'quizzes', 'flashcard_decks',
-        'assessments', 'calendar_events', 'tutor_conversations', 'bookmarks',
-        'rag_chunks'
+        'calendar_events', 'tutor_conversations', 'bookmarks'
     ];
 begin
     foreach t in array tables loop
@@ -336,8 +318,8 @@ declare
     tables text[] := array[
         'profiles', 'courses', 'materials', 'notes', 'topics', 'modules',
         'lessons', 'learning_progress', 'quizzes', 'flashcard_decks',
-        'flashcards', 'assessments', 'calendar_events',
-        'tutor_conversations', 'tutor_messages', 'bookmarks', 'rag_chunks'
+        'flashcards', 'calendar_events',
+        'tutor_conversations', 'tutor_messages', 'bookmarks'
     ];
 begin
     foreach t in array tables loop
@@ -367,8 +349,8 @@ declare
     tables text[] := array[
         'courses', 'materials', 'notes', 'topics', 'modules', 'lessons',
         'learning_progress', 'quizzes', 'flashcard_decks', 'flashcards',
-        'assessments', 'calendar_events', 'tutor_conversations',
-        'tutor_messages', 'bookmarks', 'rag_chunks'
+        'calendar_events', 'tutor_conversations',
+        'tutor_messages', 'bookmarks'
     ];
 begin
     foreach t in array tables loop

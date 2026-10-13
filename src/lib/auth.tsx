@@ -31,6 +31,7 @@ interface Auth {
   login: (email: string, password: string) => Promise<string | null>;
   signup: (name: string, email: string, password: string) => Promise<SignupOutcome>;
   logout: () => Promise<void>;
+  updateProfile: (fullName: string) => Promise<string | null>;
 }
 
 const Ctx = createContext<Auth | null>(null);
@@ -85,10 +86,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login: Auth["login"] = async (email, password) => {
     try {
-      const me = await api.auth.login(email, password);
-      // A fresh sign-in always starts the tutor with a clean slate.
-      clearTutorChatHistory();
-      setUser(me);
+      const loggedInUser = await api.auth.login(email, password);
+      // The login payload only contains the auth identity (id + email); the
+      // profile (with the display name) lives behind /api/auth/me. Fetch it
+      // so the greeting and sidebar show the real name right after signing in.
+      try {
+        setUser(await api.auth.me());
+      } catch {
+        // Session is valid; the profile fetch is best-effort.
+        setUser(loggedInUser);
+      }
       return null;
     } catch (error) {
       return error instanceof Error ? error.message : "Could not sign in.";
@@ -117,7 +124,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  const value: Auth = { user, ready, login, signup, logout };
+  const updateProfile: Auth["updateProfile"] = async (fullName) => {
+    try {
+      setUser(await api.auth.updateProfile(fullName));
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : "Could not update your profile.";
+    }
+  };
+
+  const value: Auth = {
+    user,
+    ready,
+    login,
+    signup,
+    logout,
+    updateProfile,
+  };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

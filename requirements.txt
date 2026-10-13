@@ -1,35 +1,18 @@
 # Web framework + server
-fastapi
-uvicorn[standard]
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32       # required by FastAPI for file/form uploads (materials)
 
 # Data validation (used by FastAPI, listed explicitly)
-pydantic
-email-validator          # required by pydantic EmailStr (auth schemas)
+pydantic==2.14.0
+email-validator==2.3.0          # required by pydantic EmailStr (auth schemas)
 
 # Load .env files
-python-dotenv
+python-dotenv==1.2.4
 
 # Supabase client (Part 2: database + auth)
-supabase
+supabase==2.32.0
 
 # Testing
-pytest
-httpx
-
-# Optional extraction engines (NOT required to run the app). Install only the
-# ones you need; each engine degrades to an honest warning when absent.
-#   pymupdf            # PDF text, tables and page images
-#   opencv-python      # video keyframe extraction
-#   python-pptx        # PPTX slide text
-#   pytesseract        # OCR fallback for scanned PDFs
-#                      #   also needs the Tesseract engine binary installed
-#   openai-whisper     # video transcripts; also needs the ffmpeg binary
-#   pillow             # image handling for OCR/page rendering
-
-# Optional: a real local embedding model for retrieval. The default embedder is
-# built in (feature hashing, no download, no API key), so this is optional.
-#   sentence-transformers  # local embeddings (no API key)
-#   numpy                  # numeric helpers used by some embedding backends
-# The optional LLM for AI notes/tutor calls any OpenAI-compatible API over httpx
-# (already required below) — no extra package is needed.
-
+pytest==9.1.1
+httpx==0.28.1
