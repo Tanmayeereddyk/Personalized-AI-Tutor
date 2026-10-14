@@ -21,6 +21,7 @@ import type {
   MaterialPreview,
   Note,
   Quiz,
+  Topic,
   TutorAnswer,
   TutorTurn,
   User,
@@ -432,6 +433,22 @@ interface QuizDto {
   updated_at: string | null;
 }
 
+interface TopicDto {
+  id: string;
+  user_id: string;
+  course_id: string;
+  name: string;
+  description: string | null;
+  topic_group: string | null;
+  prerequisite: string | null;
+  resource_count: number;
+  source_material_ids: string[];
+  generated: boolean;
+  generation_method: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 interface DeckDto {
   id: string;
   user_id: string;
@@ -631,6 +648,21 @@ export const toQuiz = (dto: QuizDto): Quiz => ({
   score: dto.score,
   total: dto.total,
   date: friendlyDate(dto.created_at),
+});
+
+export const toTopic = (dto: TopicDto): Topic => ({
+  id: dto.id,
+  courseId: dto.course_id,
+  name: dto.name,
+  description: dto.description ?? undefined,
+  group: dto.topic_group ?? undefined,
+  prerequisite: dto.prerequisite ?? undefined,
+  resources: dto.resource_count ?? 0,
+  sourceMaterialIds: dto.source_material_ids ?? [],
+  generated: dto.generated ?? false,
+  generationMethod: dto.generation_method ?? null,
+  createdAt: dto.created_at ?? undefined,
+  updatedAt: dto.updated_at ?? undefined,
 });
 
 export const toDeck = (dto: DeckDto): FlashcardDeck => ({
@@ -968,6 +1000,41 @@ export const api = {
       return toTutorAnswer(dto);
     },
   },
+
+  topics: {
+    /** The course's knowledge map, sorted by name (owner only). */
+    async list(courseId: string): Promise<Topic[]> {
+      const dto = await request<TopicDto[]>(`/api/courses/${courseId}/topics`);
+      return dto.map(toTopic);
+    },
+    /**
+     * Generate the knowledge map from the course's indexed content.
+     * Re-running is safe: it refreshes generated topics in place instead
+     * of creating duplicates. Fails with an actionable message when the
+     * course has no materials (400), nothing indexed yet (400), or the
+     * language model is not configured (503).
+     */
+    async generate(courseId: string): Promise<Topic[]> {
+      const dto = await request<TopicDto[]>(
+        `/api/courses/${courseId}/topics/generate`,
+        { method: "POST" },
+      );
+      return dto.map(toTopic);
+    },
+    /** Re-generate the knowledge map (e.g. after adding new materials). */
+    async refresh(courseId: string): Promise<Topic[]> {
+      const dto = await request<TopicDto[]>(
+        `/api/courses/${courseId}/topics/refresh`,
+        { method: "POST" },
+      );
+      return dto.map(toTopic);
+    },
+    /** One topic from the knowledge map (owner only). */
+    async get(topicId: string): Promise<Topic> {
+      return toTopic(await request<TopicDto>(`/api/topics/${topicId}`));
+    },
+  },
+
   quizzes: {
     async list(courseId: string): Promise<Quiz[]> {
       const dto = await request<QuizDto[]>(`/api/courses/${courseId}/quizzes`);

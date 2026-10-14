@@ -11,7 +11,16 @@ Business logic lives in services/, not here.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, courses, extraction, health, learning, materials, rag
+from app.api.routes import (
+    auth,
+    courses,
+    extraction,
+    health,
+    learning,
+    materials,
+    rag,
+    topics,
+)
 from app.core.config import settings
 
 import logging
@@ -53,6 +62,7 @@ app.include_router(learning.decks_router)
 app.include_router(learning.events_router)
 app.include_router(learning.bookmarks_router)
 app.include_router(learning.flashcards_router)
+app.include_router(topics.router)
 
 
 @app.get("/", tags=["root"])

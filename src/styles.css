@@ -185,3 +185,10 @@
 
 @keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes bar-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* KaTeX: keep typeset equations legible and scrollable instead of overflowing.
+   Selectors are scoped under our own wrapper so they win over katex.min.css
+   regardless of which stylesheet the bundler emits first. */
+.lumio-math .katex { font-size: 1.05em; }
+.lumio-math-display .katex-display { margin: 0.85rem 0; }
+.lumio-math-display .katex-display > .katex { white-space: nowrap; }

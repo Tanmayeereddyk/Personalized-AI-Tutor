@@ -24,6 +24,7 @@ import {
 import type { Flashcard } from "@/lib/types";
 import { EmptyState, Modal, PageHeader, ProgressBar } from "@/components/ui/kit";
 import { Field } from "@/components/practice/Builder";
+import { MathText } from "@/components/math/MathText";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/courses/$courseId/flashcards")({
@@ -471,7 +472,7 @@ function StudyCard({
             <RotateCw className="h-3.5 w-3.5" />
           </div>
           <div className="mt-5 flex-1 overflow-y-auto whitespace-pre-wrap break-words text-xl font-medium leading-snug">
-            {card.front}
+            <MathText text={card.front} />
           </div>
           <div className="mt-4 text-xs text-muted-foreground">Click to flip</div>
         </div>
@@ -479,7 +480,7 @@ function StudyCard({
           <div className="absolute inset-x-0 top-0 h-1 bg-primary" />
           <div className="text-xs uppercase tracking-wider text-primary">Answer</div>
           <div className="mt-5 flex-1 overflow-y-auto whitespace-pre-wrap break-words text-lg leading-relaxed">
-            {card.back}
+            <MathText text={card.back} />
           </div>
           <div className="mt-4 text-xs text-muted-foreground">Click to flip back</div>
         </div>

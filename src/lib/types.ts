@@ -3,13 +3,31 @@ export type CourseIcon = "sigma" | "boxes" | "database" | "atom" | "code" | "boo
 
 export interface User { id: string; name: string; role: string; email: string }
 
+/**
+ * One entry of a course's knowledge map. Generated topics are produced by
+ * the LLM from the course's indexed materials (see the FastAPI
+ * `app.services.topic_service`); `generated` is false for topics a user
+ * adds by hand.
+ */
 export interface Topic {
   id: string;
+  courseId: string;
   name: string;
-  mastery: number;
+  /** A short, source-grounded description of the topic (AI-generated). */
+  description?: string | undefined;
+  /** A higher-level theme the topic belongs to. */
+  group?: string | undefined;
+  /** An earlier topic name this one builds on, when the material implies ordering. */
+  prerequisite?: string | undefined;
+  /** How many of the course's materials the topic is drawn from. */
   resources: number;
-  group: string;
-  prerequisite?: string;
+  /** Which of the course's materials produced this topic. */
+  sourceMaterialIds: string[];
+  /** True when the topic was produced by the language model (not by hand). */
+  generated: boolean;
+  generationMethod?: string | null | undefined;
+  createdAt?: string | undefined;
+  updatedAt?: string | undefined;
 }
 
 export interface Course {

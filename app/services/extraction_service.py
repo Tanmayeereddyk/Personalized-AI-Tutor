@@ -13,6 +13,8 @@ warnings (via a persisted summary unit) and material status, so a failure is
 visible to the user instead of silently killing the request.
 """
 
+import logging
+
 from fastapi import HTTPException
 from supabase import Client
 
@@ -21,7 +23,10 @@ from app.services import (
     extractors,
     owned_service,
     rag_service,
+    topic_service,
 )
+
+logger = logging.getLogger("studyai.extraction")
 
 # Human-readable progress stage per material, updated live while a background
 # extraction runs and cleared the moment it finishes. The status endpoint
@@ -123,16 +128,38 @@ def run_extraction(client: Client, user_id: str, material_id: str) -> None:
         # and never invalidates the extraction that already succeeded.
         if content_units:
             _STAGES[material_id] = "indexing"
+            indexed = False
             try:
                 rag_service.index_material(client, user_id, material_id)
+                indexed = True
             except Exception as exc:  # noqa: BLE001 - recorded, never raised
                 _record_index_warning(
                     client, user_id, material_id, material, saved, exc
                 )
+            if indexed:
+                # Refresh the course's knowledge map from the fresh index so
+                # topics track the material that was just processed. Best-effort:
+                # it never affects the extraction that already succeeded.
+                _refresh_topics(client, user_id, material.get("course_id"))
     finally:
         # Always drop the live stage so a crashed run cannot leave the UI
         # polling a phase that no longer exists.
         _STAGES.pop(material_id, None)
+
+
+def _refresh_topics(client: Client, user_id: str, course_id: str | None) -> None:
+    """Regenerate a course's knowledge map after indexing new content.
+
+    Best-effort and never raises: if the language model is not configured, the
+    course has nothing indexable, or generation fails for any reason, the
+    extraction result still stands and the topics can be regenerated on demand.
+    """
+    if not course_id:
+        return
+    try:
+        topic_service.generate_topics(client, user_id, course_id)
+    except Exception as exc:  # noqa: BLE001 - topics are best-effort here
+        logger.info("topics: skipped auto-refresh for course %s (%s)", course_id, exc)
 
 
 def _record_index_warning(

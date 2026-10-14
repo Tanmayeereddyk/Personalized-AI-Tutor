@@ -64,3 +64,53 @@ describe("MarkdownDocument", () => {
     expect(screen.getByText(/<script>/)).toBeTruthy();
   });
 });
+
+describe("MarkdownDocument math", () => {
+  it("typesets inline math", () => {
+    const { container } = render(
+      <MarkdownDocument markdown={"The entry $A_{ij}$ lies in $\\mathbb{R}$."} />,
+    );
+    expect(container.querySelectorAll(".katex")).toHaveLength(2);
+    expect(container.textContent).not.toContain("$A_{ij}$");
+  });
+
+  it("parses and renders a display equation block", () => {
+    const source = ["Before", "", "$$", "A = 1", "$$", "", "After"].join("\n");
+    expect(parseBlocks(source)).toContainEqual({ type: "math", text: "A = 1" });
+
+    const { container } = render(<MarkdownDocument markdown={source} />);
+    expect(container.querySelector(".katex-display")).toBeTruthy();
+    expect(container.textContent).toContain("Before");
+    expect(container.textContent).toContain("After");
+  });
+
+  it("renders a matrix as a display equation", () => {
+    const { container } = render(
+      <MarkdownDocument markdown={"$$\\begin{bmatrix} 1 & 2 \\\\ 3 & 4 \\end{bmatrix}$$"} />,
+    );
+    expect(container.querySelector(".katex-display")).toBeTruthy();
+  });
+
+  it("keeps currency and inline code intact", () => {
+    const { container } = render(
+      <MarkdownDocument markdown={"It costs $5 and $10. Use `$x$` verbatim."} />,
+    );
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(container.textContent).toContain("$5 and $10");
+    expect(container.textContent).toContain("$x$");
+  });
+
+  it("renders math inside bullet lists without losing the list", () => {
+    const { container } = render(
+      <MarkdownDocument markdown={"- The vector $\\mathbf{v}$\n- The scalar $x_1$"} />,
+    );
+    expect(container.querySelectorAll("li")).toHaveLength(2);
+    expect(container.querySelectorAll(".katex")).toHaveLength(2);
+  });
+
+  it("does not break on malformed LaTeX", () => {
+    const { container } = render(<MarkdownDocument markdown={"Broken $\\frac{1}{$ here"} />);
+    expect(container.textContent).toContain("Broken");
+    expect(container.textContent).toContain("here");
+  });
+});

@@ -1,7 +1,8 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { Menu, Sparkles } from "lucide-react";
+import { Menu } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
+import { Logo } from "@/components/layout/Logo";
 import { AddCourseModal } from "@/components/courses/AddCourseModal";
 import { LayoutProvider, useLayout } from "@/lib/layout";
 import { cn } from "@/lib/utils";
@@ -38,10 +39,7 @@ function Shell({ children }: { children: ReactNode }) {
               </Dialog.Content>
             </Dialog.Portal>
           </Dialog.Root>
-          <span className="flex items-center gap-2 font-semibold">
-            <Sparkles className="h-4 w-4 text-primary" />
-            Lumio
-          </span>
+          <Logo className="h-7" />
         </header>
         <main className="relative flex-1">
           <div className="grid-bg pointer-events-none absolute inset-x-0 top-0 h-80" />

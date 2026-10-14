@@ -46,6 +46,10 @@ class Settings:
     RAG_TOP_K: int = int(os.getenv("RAG_TOP_K", "8"))
     RAG_MIN_SCORE: float = float(os.getenv("RAG_MIN_SCORE", "0.05"))
     RAG_NOTES_BATCH_CHUNKS: int = int(os.getenv("RAG_NOTES_BATCH_CHUNKS", "12"))
+    # Topics (knowledge map): how much indexed content is offered to the model
+    # in one call, and the most topics it may return for a course.
+    RAG_TOPICS_MAX_SOURCE_CHARS: int = int(os.getenv("RAG_TOPICS_MAX_SOURCE_CHARS", "12000"))
+    RAG_TOPICS_MAX: int = int(os.getenv("RAG_TOPICS_MAX", "12"))
 
     # ------------------------------------------------------------------
     # LLM (required for notes generation and the tutor). Any OpenAI-compatible
