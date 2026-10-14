@@ -60,6 +60,9 @@ class QuizUpdate(BaseModel):
 
 
 class QuizResponse(BaseModel):
+    """A quiz attempt. AI attempts carry the extra attempt metadata; manually
+    recorded ones simply leave it at the defaults."""
+
     id: str
     user_id: str
     course_id: str
@@ -68,6 +71,11 @@ class QuizResponse(BaseModel):
     difficulty: str = "Medium"
     score: int = 0
     total: int = 0
+    percentage: int = 0
+    quiz_set_id: str | None = None
+    scope_label: str | None = None
+    source: str = "manual"
+    submitted_at: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
 

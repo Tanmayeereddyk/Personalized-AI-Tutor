@@ -1,38 +1,43 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock,
-  FileText,
   LayoutGrid,
+  Loader2,
   RotateCw,
-  Sparkles,
   Timer,
   X,
-  XCircle,
 } from "lucide-react";
 
-import { Modal, ProgressBar, Ring } from "@/components/ui/kit";
+import { Modal, ProgressBar } from "@/components/ui/kit";
 import { MathText } from "@/components/math/MathText";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 import { useCountdown } from "@/lib/use-countdown";
+import { QuizResultView } from "@/components/practice/QuizResultView";
 import {
   formatClock,
-  isAnswerCorrect,
   labelForQuestionType,
   type GeneratedQuiz,
+  type QuizAttemptResult,
   type QuizQuestion,
+  type QuizSubmission,
 } from "@/lib/quiz";
-import { scoreTone } from "@/components/practice/Builder";
 
-type Phase = "taking" | "results";
+type Phase = "taking" | "submitting" | "results";
 type SubmitReason = "manual" | "timeout";
 
 interface QuizRunnerProps {
   quiz: GeneratedQuiz;
+  /**
+   * Grade and save this attempt on the backend. Resolves with the graded
+   * result (answers, correct answers and explanations) or rejects with an
+   * error the runner can show with a retry.
+   */
+  onSubmit: (submission: QuizSubmission) => Promise<QuizAttemptResult>;
   /** Leave the quiz entirely (back to the quiz list). */
   onExit: () => void;
 }
@@ -41,12 +46,24 @@ interface QuizRunnerProps {
 const WARN_AFTER_MS = 60_000;
 const CRITICAL_AFTER_MS = 10_000;
 
+/** A per-attempt idempotency key, so a retry never saves a duplicate. */
+function newToken(): string {
+  const webCrypto = globalThis.crypto as Crypto | undefined;
+  if (webCrypto && typeof webCrypto.randomUUID === "function") {
+    return webCrypto.randomUUID();
+  }
+  return `attempt-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 /**
  * Full-screen quiz-taking experience: question navigation, a question
- * navigator, an optional countdown and a results review. All answers live in
- * local state — nothing is sent to the backend.
+ * navigator, an optional countdown and a graded review.
+ *
+ * Answers live in local state while taking the quiz. On submit they are sent to
+ * the backend, which grades them against the stored answer key and saves the
+ * attempt; only then are the correct answers and explanations shown.
  */
-export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
+export function QuizRunner({ quiz, onSubmit, onExit }: QuizRunnerProps) {
   const total = quiz.questions.length;
 
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -57,6 +74,13 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmExit, setConfirmExit] = useState(false);
   const [announcement, setAnnouncement] = useState("");
+  const [attempt, setAttempt] = useState<QuizAttemptResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Stable per-attempt values: the idempotency token and the start time.
+  const [clientToken, setClientToken] = useState(() => newToken());
+  const startedAtRef = useRef<number>(Date.now());
+  const inFlightRef = useRef(false);
 
   // The deadline is captured once (in the initializer) and only re-created by
   // an explicit retake, so re-renders and question navigation can't restart it.
@@ -70,17 +94,45 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
     if (el) el.scrollTop = 0;
   }, []);
 
+  /** Send the current answers to the backend and show the graded result. */
+  const submitAnswers = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setError(null);
+    setPhase("submitting");
+    const timeTakenSeconds = Math.max(
+      0,
+      Math.round((Date.now() - startedAtRef.current) / 1000),
+    );
+    try {
+      const result = await onSubmit({
+        answers: quiz.questions.map((question) => ({
+          questionId: question.id,
+          answer: answers[question.id] ?? "",
+        })),
+        timeTakenSeconds,
+        clientToken,
+      });
+      setAttempt(result);
+      setPhase("results");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save your quiz attempt.");
+    } finally {
+      inFlightRef.current = false;
+    }
+  }, [answers, clientToken, onSubmit, quiz.questions]);
+
   const finish = useCallback(
     (submitReason: SubmitReason) => {
       setReason(submitReason);
       setDeadline(null); // stops the countdown immediately
-      setPhase("results");
       setConfirmSubmit(false);
       setConfirmExit(false);
       setNavOpen(false);
       resetScroll();
+      void submitAnswers();
     },
-    [resetScroll],
+    [resetScroll, submitAnswers],
   );
 
   const handleExpire = useCallback(() => finish("timeout"), [finish]);
@@ -101,19 +153,10 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
     else if (remainingMs <= WARN_AFTER_MS) setAnnouncement("1 minute remaining");
   }, [timerActive, remainingMs]);
 
-  const results = useMemo(
-    () =>
-      quiz.questions.map((question) => {
-        const given = answers[question.id] ?? "";
-        return { question, given, correct: isAnswerCorrect(question, given) };
-      }),
-    [quiz.questions, answers],
-  );
-
-  const answeredCount = results.filter((r) => r.given.trim() !== "").length;
+  const answeredCount = quiz.questions.filter(
+    (question) => (answers[question.id] ?? "").trim() !== "",
+  ).length;
   const unanswered = total - answeredCount;
-  const score = results.filter((r) => r.correct).length;
-  const pct = total > 0 ? Math.round((score / total) * 100) : 0;
 
   const setAnswer = useCallback((id: string, value: string) => {
     setAnswers((prev) => ({ ...prev, [id]: value }));
@@ -132,6 +175,10 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
     setIndex(0);
     setReason(null);
     setPhase("taking");
+    setAttempt(null);
+    setError(null);
+    setClientToken(newToken());
+    startedAtRef.current = Date.now();
     setConfirmSubmit(false);
     setConfirmExit(false);
     setNavOpen(false);
@@ -163,7 +210,7 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
   }, [phase, confirmSubmit, confirmExit]);
 
   const question = quiz.questions[index];
-  const title = phase === "results" ? "Quiz results" : quiz.title;
+  const title = phase === "taking" ? quiz.title : "Quiz results";
 
   return (
     <div
@@ -340,139 +387,61 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
             </div>
           </footer>
         </>
-      ) : (
+      ) : phase === "results" && attempt ? (
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
-            <section className="card p-6 text-center">
-              <div className="relative mx-auto h-[140px] w-[140px]">
-                <Ring value={pct} />
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className={cn("text-3xl font-semibold", scoreTone(pct))}>{pct}%</span>
-                  <span className="text-xs text-muted-foreground">
-                    {score}/{total} correct
-                  </span>
+            {reason === "timeout" ? (
+              <p className="mb-4 flex items-center justify-center gap-2 text-sm text-warning">
+                <Timer className="h-4 w-4" />
+                Time&apos;s up — your quiz was submitted automatically.
+              </p>
+            ) : (
+              <p className="mb-4 text-center text-sm text-success">
+                Your attempt was saved to your quiz history.
+              </p>
+            )}
+
+            <QuizResultView result={attempt} />
+
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
+              <button type="button" className="btn btn-primary" onClick={restart}>
+                <RotateCw className="h-4 w-4" />
+                Retake
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={onExit}>
+                Back to quizzes
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-md px-4 py-16 sm:px-6">
+            {error ? (
+              <div className="card p-6 text-center">
+                <AlertTriangle className="mx-auto h-6 w-6 text-destructive" />
+                <p className="mt-3 font-medium">Couldn&apos;t save your attempt</p>
+                <p className="mt-1 text-sm text-muted-foreground">{error}</p>
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => void submitAnswers()}
+                  >
+                    <RotateCw className="h-4 w-4" />
+                    Try again
+                  </button>
+                  <button type="button" className="btn btn-ghost" onClick={onExit}>
+                    Back to quizzes
+                  </button>
                 </div>
               </div>
-
-              {reason === "timeout" ? (
-                <p className="mt-4 flex items-center justify-center gap-2 text-sm text-warning">
-                  <Timer className="h-4 w-4" />
-                  Time&apos;s up — your quiz was submitted automatically.
-                </p>
-              ) : (
-                <p className="mt-4 text-sm text-muted-foreground">
-                  You scored {score} out of {total}.
-                </p>
-              )}
-
-              <div className="mt-4 flex flex-wrap justify-center gap-1.5">
-                <span className="chip">{quiz.difficulty}</span>
-                {quiz.questionTypes.map((type) => (
-                  <span key={type} className="chip">
-                    {labelForQuestionType(type)}
-                  </span>
-                ))}
-                <span className="chip">
-                  {quiz.timerMinutes != null ? `${quiz.timerMinutes}-minute timer` : "No timer"}
-                </span>
+            ) : (
+              <div className="card p-6 text-center">
+                <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
+                <p className="mt-3 text-sm text-muted-foreground">Saving your answers…</p>
               </div>
-
-              <p className="mt-5 flex items-start justify-center gap-2 rounded-xl border border-dashed bg-secondary/40 px-3 py-2 text-left text-xs text-muted-foreground">
-                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                These questions were generated from the topics you selected, grounded in your
-                uploaded materials.
-              </p>
-
-              <div className="mt-5 flex flex-wrap justify-center gap-2">
-                <button type="button" className="btn btn-primary" onClick={restart}>
-                  <RotateCw className="h-4 w-4" />
-                  Retake
-                </button>
-                <button type="button" className="btn btn-ghost" onClick={onExit}>
-                  Back to quizzes
-                </button>
-              </div>
-            </section>
-
-            <h3 className="mb-3 mt-8 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Review
-            </h3>
-            <ul className="space-y-3">
-              {results.map(({ question: q, given, correct }, i) => (
-                <li
-                  key={q.id}
-                  className={cn(
-                    "card border-l-4 p-4",
-                    correct ? "border-l-success" : "border-l-destructive",
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <span
-                      className={cn(
-                        "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium",
-                        correct
-                          ? "bg-success/15 text-success"
-                          : "bg-destructive/15 text-destructive",
-                      )}
-                    >
-                      {i + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium">
-                        <MathText text={q.prompt} />
-                      </p>
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        <span className="chip">{labelForQuestionType(q.type)}</span>
-                      </div>
-
-                      <dl className="mt-3 space-y-1.5 text-sm">
-                        <div className="flex gap-2">
-                          <dt className="w-28 shrink-0 text-muted-foreground">Your answer</dt>
-                          <dd
-                            className={cn(
-                              "min-w-0 break-words",
-                              correct ? "text-success" : "text-destructive",
-                            )}
-                          >
-                            {given.trim() ? (
-                              <MathText text={given} />
-                            ) : (
-                              <span className="italic text-muted-foreground">Not answered</span>
-                            )}
-                          </dd>
-                        </div>
-                        {!correct ? (
-                          <div className="flex gap-2">
-                            <dt className="w-28 shrink-0 text-muted-foreground">Correct answer</dt>
-                            <dd className="min-w-0 break-words">
-                              <MathText text={q.correctAnswer} />
-                            </dd>
-                          </div>
-                        ) : null}
-                      </dl>
-
-                      <p className="mt-3 rounded-lg bg-secondary/50 px-3 py-2 text-sm text-muted-foreground">
-                        <MathText text={q.explanation} />
-                      </p>
-
-                      {q.source ? (
-                        <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <FileText className="h-3.5 w-3.5" />
-                          Source: <span className="text-foreground">
-                            {q.source.materialName}
-                          </span> · {q.source.label}
-                        </p>
-                      ) : null}
-                    </div>
-                    {correct ? (
-                      <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
-                    ) : (
-                      <XCircle className="h-5 w-5 shrink-0 text-destructive" />
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            )}
           </div>
         </div>
       )}

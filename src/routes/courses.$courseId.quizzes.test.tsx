@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 
+import type { QuizAttemptResult, QuizSubmission } from "@/lib/quiz";
 import type { Quiz } from "@/lib/types";
 import { Quizzes } from "./courses.$courseId.quizzes";
 
@@ -23,6 +24,7 @@ const mocks = vi.hoisted(() => {
   /** A minimal generated quiz; the timer is mirrored from the request. */
   const quizFor = (timerMinutes: number | null) => ({
     id: "quiz-1",
+    setId: "quiz-1",
     courseId: "c1",
     title: "Photosynthesis — Practice Quiz",
     scopeLabel: "Photosynthesis",
@@ -53,8 +55,56 @@ const mocks = vi.hoisted(() => {
     ],
   });
 
+  /** Grade a submission the same way the backend does, for the mocked hook. */
+  const resultFor = (input: {
+    setId: string;
+    submission: {
+      answers: { questionId: string; answer: string }[];
+      timeTakenSeconds: number | null;
+      clientToken: string;
+    };
+  }): QuizAttemptResult => {
+    const quiz = quizFor(null);
+    const given = new Map(input.submission.answers.map((a) => [a.questionId, a.answer]));
+    const results = quiz.questions.map((q) => {
+      const answer = given.get(q.id) ?? "";
+      const expected = (q.correctAnswer ?? "").trim().toLowerCase();
+      const correct = answer.trim() !== "" && answer.trim().toLowerCase() === expected;
+      return {
+        id: q.id,
+        type: q.type,
+        prompt: q.prompt,
+        options: q.options,
+        given: answer,
+        correct,
+        correctAnswer: q.correctAnswer ?? "",
+        explanation: q.explanation ?? "",
+        source: q.source,
+      };
+    });
+    const score = results.filter((r) => r.correct).length;
+    return {
+      id: "attempt-1",
+      courseId: "c1",
+      quizSetId: "quiz-1",
+      title: quiz.title,
+      scopeLabel: quiz.scopeLabel,
+      difficulty: "Medium",
+      questionTypes: ["multiple-choice"],
+      timerMinutes: null,
+      score,
+      total: results.length,
+      percentage: results.length ? Math.round((score / results.length) * 100) : 0,
+      source: "ai",
+      submittedAt: "2024-01-01T00:00:00.000Z",
+      createdAt: "2024-01-01T00:00:00.000Z",
+      results,
+    };
+  };
+
   return {
     quizFor,
+    resultFor,
     topics: [
       {
         id: "t1",
@@ -87,8 +137,22 @@ const mocks = vi.hoisted(() => {
       isPending: false,
       variables: undefined as string | undefined,
     },
+    // The submit mutation the runner calls; defaults to grading in the mock.
+    submitState: {
+      mutateAsync: vi.fn<
+        (input: { setId: string; submission: QuizSubmission }) => Promise<QuizAttemptResult>
+      >(async (input) => resultFor(input)),
+    },
     // Saved attempts shown in the list (returned by the mocked useQuizzes).
     savedQuizzes: [] as Quiz[],
+    // The saved result the review modal fetches (mocked useQuizResult).
+    resultState: {
+      data: undefined as QuizAttemptResult | undefined,
+      isLoading: false,
+      isError: false,
+      error: null as unknown,
+      refetch: vi.fn(),
+    },
   };
 });
 
@@ -110,6 +174,8 @@ vi.mock("@/lib/queries", () => ({
     refetch: vi.fn(),
   }),
   useGenerateQuiz: () => mocks.generateState,
+  useSubmitQuiz: () => ({ mutateAsync: mocks.submitState.mutateAsync, isPending: false }),
+  useQuizResult: () => mocks.resultState,
 }));
 
 beforeEach(() => {
@@ -125,6 +191,14 @@ beforeEach(() => {
   mocks.generateState.mutate = vi.fn((input, options) => {
     options?.onSuccess?.(mocks.quizFor(input.config.timerMinutes));
   });
+  mocks.submitState.mutateAsync = vi.fn<
+    (input: { setId: string; submission: QuizSubmission }) => Promise<QuizAttemptResult>
+  >(async (input) => mocks.resultFor(input));
+  mocks.resultState.data = undefined;
+  mocks.resultState.isLoading = false;
+  mocks.resultState.isError = false;
+  mocks.resultState.error = null;
+  mocks.resultState.refetch = vi.fn();
 });
 
 /** Drive the builder from the page CTA up to the full-screen runner. */
@@ -202,7 +276,7 @@ describe("quiz generation flow", () => {
     expect(screen.getByText(/^\d{2}:\d{2}$/)).toBeInTheDocument();
   });
 
-  it("scores the quiz and shows the review after submitting", () => {
+  it("scores the quiz and shows the review after submitting", async () => {
     openQuiz();
 
     const runner = screen.getByRole("dialog", { name: /Practice Quiz/ });
@@ -213,9 +287,11 @@ describe("quiz generation flow", () => {
     const confirm = screen.getByRole("dialog", { name: "Submit this quiz?" });
     fireEvent.click(within(confirm).getByRole("button", { name: "Submit Quiz" }));
 
-    expect(screen.getByText("Review")).toBeInTheDocument();
+    // The attempt is graded and saved on the backend before the review shows.
+    expect(await screen.findByText("Review")).toBeInTheDocument();
     expect(screen.getByText(/You scored/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Retake/ })).toBeInTheDocument();
+    expect(mocks.submitState.mutateAsync).toHaveBeenCalledTimes(1);
   });
 
   it("shows a loading state and prevents duplicate submissions", () => {
@@ -249,6 +325,53 @@ describe("quiz generation flow", () => {
     );
     // The failed request can be retried.
     expect(within(configStep).getByRole("button", { name: /Try again/i })).toBeEnabled();
+  });
+});
+
+describe("quiz history", () => {
+  const aiQuiz = (): Quiz => ({
+    id: "quiz-ai",
+    courseId: "c1",
+    name: "Photosynthesis — Practice Quiz",
+    topic: "Photosynthesis",
+    difficulty: "Medium",
+    score: 1,
+    total: 2,
+    percentage: 50,
+    date: "today",
+    source: "ai",
+  });
+
+  it("lists an attempt with its score and reopens the saved result", async () => {
+    mocks.savedQuizzes = [aiQuiz()];
+    mocks.resultState.data = mocks.resultFor({
+      setId: "quiz-1",
+      submission: {
+        answers: [{ questionId: "q1", answer: "Light energy" }],
+        timeTakenSeconds: null,
+        clientToken: "t",
+      },
+    });
+    render(<Quizzes />);
+
+    // One compact row: title, score and percentage.
+    expect(screen.getByText("Quiz History")).toBeInTheDocument();
+    expect(screen.getByText("Photosynthesis — Practice Quiz")).toBeInTheDocument();
+    expect(screen.getByText("50%")).toBeInTheDocument();
+
+    // Opening the row shows the saved answers, answer key and explanations.
+    fireEvent.click(screen.getByRole("button", { name: "Open Photosynthesis — Practice Quiz" }));
+    expect(await screen.findByText(/You scored/)).toBeInTheDocument();
+  });
+
+  it("shows only a score note for a manually recorded attempt", () => {
+    mocks.savedQuizzes = [
+      { ...aiQuiz(), id: "quiz-manual", name: "Midterm practice", source: "manual" },
+    ];
+    render(<Quizzes />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Midterm practice" }));
+    expect(screen.getByText(/recorded manually/)).toBeInTheDocument();
   });
 });
 
@@ -299,7 +422,7 @@ describe("quiz deletion", () => {
       expect(screen.queryByText("Midterm practice")).not.toBeInTheDocument(),
     );
     expect(mocks.deleteState.mutateAsync).toHaveBeenCalledWith("quiz-a");
-    expect(vi.mocked(toast.success)).toHaveBeenCalled();
+    expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Quiz attempt deleted.");
   });
 
   it("keeps the quiz and shows an error when deletion fails", async () => {

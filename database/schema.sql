@@ -170,19 +170,55 @@ create table if not exists public.learning_progress (
 );
 
 -- ------------------------------------------------------------
+-- QUIZ SETS: an AI-generated quiz + its answer key (server-side only)
+-- The browser never receives the correct answers; they are stored here
+-- and read only on the server to grade a submission.
+-- ------------------------------------------------------------
+create table if not exists public.quiz_sets (
+    id             uuid primary key default gen_random_uuid(),
+    user_id        uuid not null references auth.users (id) on delete cascade,
+    course_id      uuid not null references public.courses (id) on delete cascade,
+    title          text not null,
+    scope_label    text not null default '',
+    topic_ids      uuid[] not null default '{}',
+    topic_names    text[] not null default '{}',
+    material_ids   uuid[] not null default '{}',
+    difficulty     text not null default 'Medium',
+    question_types text[] not null default '{}',
+    timer_minutes  integer,
+    questions      jsonb not null default '[]'::jsonb,
+    generated_at   timestamptz not null default now(),
+    created_at     timestamptz not null default now(),
+    updated_at     timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
 -- QUIZZES: quiz attempts owned by the user
 -- ------------------------------------------------------------
 create table if not exists public.quizzes (
-    id         uuid primary key default gen_random_uuid(),
-    user_id    uuid not null references auth.users (id) on delete cascade,
-    course_id  uuid not null references public.courses (id) on delete cascade,
-    name       text not null,
-    topic      text,
-    difficulty text not null default 'Medium',
-    score      integer not null default 0,
-    total      integer not null default 0,
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now()
+    id                 uuid primary key default gen_random_uuid(),
+    user_id            uuid not null references auth.users (id) on delete cascade,
+    course_id          uuid not null references public.courses (id) on delete cascade,
+    name               text not null,
+    topic              text,
+    difficulty         text not null default 'Medium',
+    score              integer not null default 0,
+    total              integer not null default 0,
+    percentage         integer not null default 0,
+    quiz_set_id        uuid references public.quiz_sets (id) on delete set null,
+    submitted_at       timestamptz,
+    answers            jsonb not null default '{}'::jsonb,
+    results            jsonb not null default '[]'::jsonb,
+    topic_ids          uuid[] not null default '{}',
+    topic_names        text[] not null default '{}',
+    scope_label        text,
+    question_types     text[] not null default '{}',
+    timer_minutes      integer,
+    time_taken_seconds integer,
+    source             text not null default 'manual',
+    client_token       text,
+    created_at         timestamptz not null default now(),
+    updated_at         timestamptz not null default now()
 );
 
 -- ------------------------------------------------------------
@@ -272,7 +308,11 @@ create unique index if not exists topics_course_name_uidx on public.topics (user
 create index if not exists modules_user_idx             on public.modules (user_id, course_id);
 create index if not exists lessons_user_idx             on public.lessons (user_id, course_id);
 create index if not exists progress_user_idx            on public.learning_progress (user_id, course_id);
+create index if not exists quiz_sets_user_idx           on public.quiz_sets (user_id, course_id);
 create index if not exists quizzes_user_idx             on public.quizzes (user_id, course_id);
+create index if not exists quizzes_user_time_idx        on public.quizzes (user_id, created_at desc);
+create index if not exists quizzes_set_idx              on public.quizzes (quiz_set_id);
+create unique index if not exists quizzes_client_token_uidx on public.quizzes (user_id, client_token) where client_token is not null;
 create index if not exists decks_user_idx               on public.flashcard_decks (user_id, course_id);
 create index if not exists flashcards_user_idx          on public.flashcards (user_id, deck_id);
 create index if not exists calendar_user_idx            on public.calendar_events (user_id, event_date);
@@ -301,7 +341,7 @@ declare
     t text;
     tables text[] := array[
         'profiles', 'courses', 'materials', 'notes', 'topics', 'modules',
-        'lessons', 'learning_progress', 'quizzes', 'flashcard_decks',
+        'lessons', 'learning_progress', 'quiz_sets', 'quizzes', 'flashcard_decks',
         'calendar_events', 'tutor_conversations', 'bookmarks'
     ];
 begin
@@ -326,8 +366,8 @@ declare
     t text;
     tables text[] := array[
         'profiles', 'courses', 'materials', 'notes', 'topics', 'modules',
-        'lessons', 'learning_progress', 'quizzes', 'flashcard_decks',
-        'flashcards', 'calendar_events',
+        'lessons', 'learning_progress', 'quiz_sets', 'quizzes', 'flashcard_decks',
+        'flashcards', 'calendar_events', 'rag_chunks',
         'tutor_conversations', 'tutor_messages', 'bookmarks'
     ];
 begin
@@ -357,8 +397,8 @@ declare
     t text;
     tables text[] := array[
         'courses', 'materials', 'notes', 'topics', 'modules', 'lessons',
-        'learning_progress', 'quizzes', 'flashcard_decks', 'flashcards',
-        'calendar_events', 'tutor_conversations',
+        'learning_progress', 'quiz_sets', 'quizzes', 'flashcard_decks', 'flashcards',
+        'calendar_events', 'rag_chunks', 'tutor_conversations',
         'tutor_messages', 'bookmarks'
     ];
 begin

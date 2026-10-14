@@ -27,7 +27,14 @@ import type {
   TutorTurn,
   User,
 } from "./types";
-import type { GeneratedQuiz, QuizQuestion, QuizQuestionType } from "./quiz";
+import type {
+  GeneratedQuiz,
+  QuizAttemptResult,
+  QuizQuestion,
+  QuizQuestionType,
+  QuizResultItem,
+  QuizSubmission,
+} from "./quiz";
 
 const BASE = (
   (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:8000"
@@ -431,6 +438,11 @@ interface QuizDto {
   difficulty: string;
   score: number;
   total: number;
+  percentage: number | null;
+  quiz_set_id: string | null;
+  scope_label: string | null;
+  source: string | null;
+  submitted_at: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -439,7 +451,7 @@ interface QuizQuestionSourceDto {
   label: string;
   material_id: string | null;
   material_name: string;
-  snippet: string;
+  snippet?: string | null;
 }
 
 interface QuizQuestionDto {
@@ -447,14 +459,15 @@ interface QuizQuestionDto {
   type: string;
   prompt: string;
   options: string[] | null;
-  correct_answer: string;
-  accepted_answers: string[] | null;
-  explanation: string;
+  correct_answer?: string | null;
+  accepted_answers?: string[] | null;
+  explanation?: string | null;
   source: QuizQuestionSourceDto | null;
 }
 
 interface GeneratedQuizDto {
   id: string;
+  set_id: string;
   course_id: string;
   title: string;
   scope_label: string;
@@ -465,6 +478,39 @@ interface GeneratedQuizDto {
   timer_minutes: number | null;
   generated_at: string;
   questions: QuizQuestionDto[];
+}
+
+interface QuizResultItemDto {
+  id: string;
+  type: string;
+  prompt: string;
+  options: string[] | null;
+  given: string;
+  correct: boolean;
+  correct_answer: string;
+  explanation: string;
+  source: QuizQuestionSourceDto | null;
+}
+
+interface QuizAttemptDto {
+  id: string;
+  user_id: string;
+  course_id: string;
+  quiz_set_id: string | null;
+  title: string;
+  scope_label: string | null;
+  topic_ids: string[];
+  topic_names: string[];
+  difficulty: string;
+  question_types: string[];
+  timer_minutes: number | null;
+  score: number;
+  total: number;
+  percentage: number;
+  source: string;
+  submitted_at: string | null;
+  created_at: string | null;
+  results: QuizResultItemDto[];
 }
 
 interface TopicDto {
@@ -682,6 +728,11 @@ export const toQuiz = (dto: QuizDto): Quiz => ({
   score: dto.score,
   total: dto.total,
   date: friendlyDate(dto.created_at),
+  percentage: dto.total ? Math.round((dto.score / dto.total) * 100) : (dto.percentage ?? 0),
+  source: dto.source ?? "manual",
+  quizSetId: dto.quiz_set_id,
+  scopeLabel: dto.scope_label,
+  submittedAt: dto.submitted_at,
 });
 
 const QUIZ_QUESTION_TYPE_VALUES: QuizQuestionType[] = [
@@ -700,20 +751,57 @@ const toQuizQuestion = (dto: QuizQuestionDto): QuizQuestion => ({
   type: toQuizQuestionType(dto.type),
   prompt: dto.prompt,
   options: dto.options ?? undefined,
-  correctAnswer: dto.correct_answer,
+  correctAnswer: dto.correct_answer ?? undefined,
   acceptedAnswers: dto.accepted_answers ?? undefined,
-  explanation: dto.explanation,
+  explanation: dto.explanation ?? undefined,
   source: dto.source
     ? {
         label: dto.source.label,
         materialName: dto.source.material_name,
-        snippet: dto.source.snippet,
+        snippet: dto.source.snippet ?? undefined,
       }
     : undefined,
 });
 
+const toQuizResultItem = (dto: QuizResultItemDto): QuizResultItem => ({
+  id: dto.id,
+  type: toQuizQuestionType(dto.type),
+  prompt: dto.prompt,
+  options: dto.options ?? undefined,
+  given: dto.given ?? "",
+  correct: dto.correct,
+  correctAnswer: dto.correct_answer,
+  explanation: dto.explanation ?? "",
+  source: dto.source
+    ? {
+        label: dto.source.label,
+        materialName: dto.source.material_name,
+        snippet: dto.source.snippet ?? undefined,
+      }
+    : undefined,
+});
+
+export const toQuizAttemptResult = (dto: QuizAttemptDto): QuizAttemptResult => ({
+  id: dto.id,
+  courseId: dto.course_id,
+  quizSetId: dto.quiz_set_id,
+  title: dto.title,
+  scopeLabel: dto.scope_label,
+  difficulty: (dto.difficulty as QuizAttemptResult["difficulty"]) ?? "Medium",
+  questionTypes: (dto.question_types ?? []).map(toQuizQuestionType),
+  timerMinutes: dto.timer_minutes,
+  score: dto.score,
+  total: dto.total,
+  percentage: dto.percentage ?? (dto.total ? Math.round((dto.score / dto.total) * 100) : 0),
+  source: dto.source ?? "ai",
+  submittedAt: dto.submitted_at,
+  createdAt: dto.created_at,
+  results: (dto.results ?? []).map(toQuizResultItem),
+});
+
 export const toGeneratedQuiz = (dto: GeneratedQuizDto): GeneratedQuiz => ({
   id: dto.id,
+  setId: dto.set_id,
   courseId: dto.course_id,
   title: dto.title,
   scopeLabel: dto.scope_label,
@@ -1156,6 +1244,35 @@ export const api = {
           },
         }),
       );
+    },
+    /**
+     * Grade the submitted answers on the backend and save the attempt.
+     *
+     * The score is computed server-side from the stored answer key — the
+     * frontend never sends a score. `clientToken` makes the write idempotent,
+     * so a double-click or a retried request cannot create a duplicate.
+     */
+    async submit(setId: string, submission: QuizSubmission): Promise<QuizAttemptResult> {
+      return toQuizAttemptResult(
+        await request<QuizAttemptDto>(`/api/quiz-sets/${setId}/submit`, {
+          method: "POST",
+          body: {
+            answers: submission.answers.map((answer) => ({
+              question_id: answer.questionId,
+              answer: answer.answer,
+            })),
+            time_taken_seconds: submission.timeTakenSeconds,
+            client_token: submission.clientToken,
+          },
+        }),
+      );
+    },
+    /**
+     * Reopen a saved attempt: its answers, the correct answers and the
+     * explanations. Owner-only, so another user's id returns 404.
+     */
+    async result(id: string): Promise<QuizAttemptResult> {
+      return toQuizAttemptResult(await request<QuizAttemptDto>(`/api/quizzes/${id}/result`));
     },
     /**
      * Delete a saved quiz attempt.

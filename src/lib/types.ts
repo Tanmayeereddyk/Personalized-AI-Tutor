@@ -138,6 +138,14 @@ export type Difficulty = "Easy" | "Medium" | "Hard" | "Mixed";
 export interface Quiz {
   id: string; courseId: string; name: string; topic: string; difficulty: Difficulty;
   score: number; total: number; date: string;
+  /** 0-100, stored on the backend for graded AI attempts. */
+  percentage?: number | undefined;
+  /** "ai" for a graded generated quiz, "manual" for a hand-logged score. */
+  source?: string | undefined;
+  /** Present for AI attempts: the generated quiz they came from. */
+  quizSetId?: string | null | undefined;
+  scopeLabel?: string | null | undefined;
+  submittedAt?: string | null | undefined;
 }
 
 export interface FlashcardDeck { id: string; courseId: string; topic: string; cards: number; lastReviewed: string }

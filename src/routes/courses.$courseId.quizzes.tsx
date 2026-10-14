@@ -2,10 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { ListChecks, Loader2, Sparkles, ClipboardList, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { useCreateQuiz, useDeleteQuiz, useQuizzes } from "@/lib/queries";
+import { useCreateQuiz, useDeleteQuiz, useQuizResult, useQuizzes, useSubmitQuiz } from "@/lib/queries";
 import { EmptyState, Modal, PageHeader } from "@/components/ui/kit";
 import { Field, PillGroup, scoreBorder, scoreTone } from "@/components/practice/Builder";
 import { QuizBuilder } from "@/components/practice/QuizBuilder";
+import { QuizResultView } from "@/components/practice/QuizResultView";
 import { QuizRunner } from "@/components/practice/QuizRunner";
 import type { GeneratedQuiz } from "@/lib/quiz";
 import type { Quiz } from "@/lib/types";
@@ -17,21 +18,31 @@ export const Route = createFileRoute("/courses/$courseId/quizzes")({
 
 const blankQuiz = { name: "", topic: "", difficulty: "Medium", score: "0", total: "0" };
 
+const percentFor = (quiz: Quiz): number =>
+  quiz.percentage ?? (quiz.total ? Math.round((quiz.score / quiz.total) * 100) : 0);
+
 export function Quizzes() {
   const { courseId } = Route.useParams();
   const quizzes = useQuizzes(courseId);
   const create = useCreateQuiz(courseId);
   const removeQuiz = useDeleteQuiz(courseId);
+  const submitQuiz = useSubmitQuiz(courseId);
   const list = quizzes.data ?? [];
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(blankQuiz);
 
-  // The generated quiz lives in local state only; nothing is persisted.
+  // The generated quiz lives in local state only until it is submitted.
   const [builderOpen, setBuilderOpen] = useState(false);
   const [session, setSession] = useState<GeneratedQuiz | null>(null);
 
-  // The quiz waiting for a confirmation before it is deleted for good.
+  // The saved attempt waiting for a confirmation before it is deleted for good.
   const [confirming, setConfirming] = useState<Quiz | null>(null);
+  // A saved attempt opened for review (its answers, answers key and explanations).
+  const [viewing, setViewing] = useState<Quiz | null>(null);
+  const viewingResult = useQuizResult(
+    viewing && viewing.source === "ai" ? viewing.id : null,
+  );
+
   // Which row's delete button shows a spinner, if a delete is in flight.
   const deletingId = removeQuiz.isPending ? (removeQuiz.variables ?? null) : null;
   const deleteDescription = confirming
@@ -55,7 +66,7 @@ export function Quizzes() {
     try {
       await removeQuiz.mutateAsync(target.id);
       setSession((current) => (current && current.id === target.id ? null : current));
-      toast.success("Quiz deleted.");
+      toast.success("Quiz attempt deleted.");
       setConfirming(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not delete the quiz.");
@@ -83,6 +94,8 @@ export function Quizzes() {
       toast.error(error instanceof Error ? error.message : "Could not save the quiz.");
     }
   };
+
+  const viewingPct = viewing ? percentFor(viewing) : 0;
 
   return (
     <div>
@@ -128,17 +141,44 @@ export function Quizzes() {
           }
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {list.map((q, i) => {
-            const pct = q.total ? Math.round((q.score / q.total) * 100) : 0;
-            return (
-              <div
-                key={q.id}
-                className={cn("card lift fade-up flex flex-col border-l-2 p-5", scoreBorder(pct))}
-                style={{ animationDelay: `${i * 50}ms` }}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="min-w-0 break-words font-medium">{q.name}</h3>
+        <section>
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Quiz History
+          </h2>
+          <ul className="space-y-2">
+            {list.map((q) => {
+              const pct = percentFor(q);
+              return (
+                <li
+                  key={q.id}
+                  className={cn(
+                    "card flex items-center gap-4 border-l-2 px-4 py-3",
+                    scoreBorder(pct),
+                  )}
+                >
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => setViewing(q)}
+                    aria-label={`Open ${q.name}`}
+                  >
+                    <p className="truncate font-medium">{q.name}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {q.date}
+                      {q.source === "ai" ? " · AI practice quiz" : " · Recorded attempt"}
+                    </p>
+                  </button>
+
+                  <div className="shrink-0 text-right">
+                    <div className="font-mono text-sm font-semibold tabular-nums">
+                      {q.score}
+                      <span className="text-muted-foreground"> / {q.total}</span>
+                    </div>
+                    <div className={cn("font-mono text-xs font-semibold", scoreTone(pct))}>
+                      {pct}%
+                    </div>
+                  </div>
+
                   <button
                     type="button"
                     className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:pointer-events-none disabled:opacity-50"
@@ -152,30 +192,57 @@ export function Quizzes() {
                       <Trash2 className="h-4 w-4" />
                     )}
                   </button>
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  <span className="chip">{q.topic}</span>
-                  <span className="chip">{q.difficulty}</span>
-                  <span className="chip">{q.total} Qs</span>
-                </div>
-                <div className="mt-6 flex items-end justify-between">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Score</div>
-                    <div className="font-mono text-2xl font-semibold">
-                      {q.score}
-                      <span className="text-muted-foreground"> / {q.total}</span>
-                    </div>
-                  </div>
-                  <div className={cn("font-mono text-3xl font-semibold", scoreTone(pct))}>
-                    {pct}%
-                  </div>
-                </div>
-                <div className="mt-4 text-xs text-muted-foreground">Attempted {q.date}</div>
-              </div>
-            );
-          })}
-        </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
+
+      {/* Reopen a saved attempt: answers, correct answers and explanations. */}
+      <Modal
+        open={viewing !== null}
+        onOpenChange={(next) => {
+          if (!next) setViewing(null);
+        }}
+        size="lg"
+        title={viewing?.name ?? "Quiz result"}
+        description={
+          viewing
+            ? `${viewing.date} · ${viewing.score} / ${viewing.total} (${viewingPct}%)`
+            : "Review a saved quiz attempt."
+        }
+      >
+        {viewing ? (
+          viewing.source === "ai" ? (
+            viewingResult.isLoading ? (
+              <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading your result…
+              </div>
+            ) : viewingResult.isError ? (
+              <div className="py-8 text-center">
+                <p className="font-medium">Couldn't load this result</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {(viewingResult.error as Error).message}
+                </p>
+                <button className="btn btn-primary mt-5" onClick={() => viewingResult.refetch()}>
+                  Try again
+                </button>
+              </div>
+            ) : viewingResult.data ? (
+              <div className="max-h-[70vh] overflow-y-auto pr-1">
+                <QuizResultView result={viewingResult.data} />
+              </div>
+            ) : null
+          ) : (
+            <p className="py-6 text-sm text-muted-foreground">
+              This attempt was recorded manually, so only its score was saved. Generate an AI quiz
+              to keep the full answers and explanations.
+            </p>
+          )
+        ) : null}
+      </Modal>
 
       <Modal
         open={open}
@@ -244,7 +311,7 @@ export function Quizzes() {
         </form>
       </Modal>
 
-      {/* Confirm before a quiz is permanently deleted. */}
+      {/* Confirm before an attempt is permanently deleted. */}
       <Modal
         open={confirming !== null}
         onOpenChange={(next) => {
@@ -288,7 +355,14 @@ export function Quizzes() {
       />
 
       {session ? (
-        <QuizRunner key={session.id} quiz={session} onExit={() => setSession(null)} />
+        <QuizRunner
+          key={session.id}
+          quiz={session}
+          onSubmit={(submission) =>
+            submitQuiz.mutateAsync({ setId: session.setId, submission })
+          }
+          onExit={() => setSession(null)}
+        />
       ) : null}
     </div>
   );

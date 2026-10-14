@@ -12,7 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import { useAuth } from "./auth";
 import { generateNotesWithProgress, type NotesPhase } from "./notes-generation";
-import type { QuizConfig } from "./quiz";
+import type { QuizConfig, QuizSubmission } from "./quiz";
 import type { Quiz } from "./types";
 
 export const useMaterials = (courseId: string) => {
@@ -316,6 +316,39 @@ export const useGenerateQuiz = (courseId: string) => {
         questionTypes: input.config.questionTypes,
         timerMinutes: input.config.timerMinutes,
       }),
+  });
+};
+
+/**
+ * Submit (and save) a generated quiz attempt.
+ *
+ * The backend grades the answers and stores the attempt; on success the quiz
+ * list is refreshed so the new history entry appears. Errors (e.g. an expired
+ * quiz) are surfaced to the runner, which offers a retry that reuses the same
+ * idempotency token.
+ */
+export const useSubmitQuiz = (courseId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { setId: string; submission: QuizSubmission }) =>
+      api.quizzes.submit(input.setId, input.submission),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quizzes", user?.id, courseId] });
+    },
+  });
+};
+
+/**
+ * Load one saved attempt with its answers and the answer key (history review).
+ * Disabled until an id is provided.
+ */
+export const useQuizResult = (quizId: string | null) => {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["quiz-result", user?.id, quizId],
+    queryFn: () => api.quizzes.result(quizId as string),
+    enabled: !!user && !!quizId,
   });
 };
 
