@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildMockQuiz, formatClock, isAnswerCorrect } from "./quiz-mock";
+import { formatClock, isAnswerCorrect } from "./quiz";
 
 describe("formatClock", () => {
   it("formats milliseconds as MM:SS", () => {
@@ -9,48 +9,6 @@ describe("formatClock", () => {
     expect(formatClock(60_000)).toBe("01:00");
     expect(formatClock(600_000)).toBe("10:00");
     expect(formatClock(3_600_000)).toBe("60:00");
-  });
-});
-
-describe("buildMockQuiz", () => {
-  it("honours the question count and selected types", () => {
-    const quiz = buildMockQuiz({
-      courseId: "c1",
-      materialId: "m1",
-      materialName: "lecture.pdf",
-      config: {
-        questionCount: 4,
-        difficulty: "Hard",
-        questionTypes: ["multiple-choice", "true-false"],
-        timerMinutes: 10,
-      },
-    });
-
-    expect(quiz.questions).toHaveLength(4);
-    expect(
-      quiz.questions.every(
-        (q) => q.type === "multiple-choice" || q.type === "true-false",
-      ),
-    ).toBe(true);
-    expect(quiz.materialName).toBe("lecture.pdf");
-    expect(quiz.timerMinutes).toBe(10);
-    expect(quiz.questions[0]?.source?.materialName).toBe("lecture.pdf");
-  });
-
-  it("covers every selected type when the count allows", () => {
-    const quiz = buildMockQuiz({
-      courseId: "c1",
-      materialId: "m1",
-      materialName: "notes.docx",
-      config: {
-        questionCount: 3,
-        difficulty: "Mixed",
-        questionTypes: ["multiple-choice", "true-false", "short-answer"],
-        timerMinutes: null,
-      },
-    });
-
-    expect(new Set(quiz.questions.map((q) => q.type)).size).toBe(3);
   });
 });
 

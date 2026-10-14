@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { ArrowUp, Info, Sparkles } from "lucide-react";
+import { ArrowUp, Info, RefreshCw, Sparkles } from "lucide-react";
 
 import { CitationChips } from "@/components/Citations";
 import { MarkdownDocument } from "@/components/notes/MarkdownDocument";
@@ -13,6 +13,7 @@ interface TutorChatProps {
   value: string;
   onValueChange: (value: string) => void;
   onSend: (text: string) => void;
+  onRetry: () => void;
   onReset: () => void;
 }
 
@@ -22,7 +23,13 @@ const SUGGESTIONS = [
   "Make a 5-question self-quiz",
 ];
 
-function MessageRow({ m }: { m: ChatMessage }) {
+function MessageRow({
+  m,
+  onRetry,
+}: {
+  m: ChatMessage;
+  onRetry?: (() => void) | undefined;
+}) {
   if (m.role === "user") {
     return (
       <div className="fade-up ml-auto max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-secondary px-4 py-2.5 text-sm leading-relaxed">
@@ -35,7 +42,17 @@ function MessageRow({ m }: { m: ChatMessage }) {
     return (
       <div className="fade-up mx-auto flex max-w-[92%] items-start gap-2 rounded-xl border border-dashed bg-surface-2/50 px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 break-words">{m.content}</span>
+        <span className="min-w-0 flex-1 break-words">{m.content}</span>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex shrink-0 items-center gap-1 font-medium text-foreground underline-offset-2 hover:underline"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Retry
+          </button>
+        )}
       </div>
     );
   }
@@ -66,6 +83,7 @@ export function TutorChat({
   value,
   onValueChange,
   onSend,
+  onRetry,
   onReset,
 }: TutorChatProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -168,8 +186,14 @@ export function TutorChat({
           </div>
         )}
 
-        {messages.map((m) => (
-          <MessageRow key={m.id} m={m} />
+        {messages.map((m, i) => (
+          <MessageRow
+            key={m.id}
+            m={m}
+            // Only the newest turn offers Retry, so old failures don't sprout
+            // duplicate buttons.
+            onRetry={i === messages.length - 1 ? onRetry : undefined}
+          />
         ))}
 
         {pending && (

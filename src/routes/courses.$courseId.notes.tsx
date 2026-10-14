@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { StudySurface } from "@/components/study/StudySurface";
@@ -91,7 +91,23 @@ export function Notes() {
       ) : null}
 
       {generate.error ? (
-        <p className="mb-4 text-sm text-destructive">{(generate.error as Error).message}</p>
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <span className="text-destructive">{(generate.error as Error).message}</span>
+          {/* Retry reuses the chosen material; the selection is never reset. */}
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 font-medium text-destructive underline-offset-2 hover:underline disabled:opacity-60"
+            onClick={() => void generateNotes()}
+            disabled={generate.isPending}
+          >
+            {generate.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            {generate.isPending ? "Retrying…" : "Retry"}
+          </button>
+        </div>
       ) : null}
 
       <StudySurface

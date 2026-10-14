@@ -1,7 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Notes } from "./courses.$courseId.notes";
+
+const notesState = vi.hoisted(() => ({
+  mutateAsync: vi.fn(async () => ({})),
+  isPending: false,
+  error: null as unknown,
+}));
 
 vi.mock("@tanstack/react-router", () => {
   const useParams = () => ({ courseId: "c1" });
@@ -51,7 +57,7 @@ vi.mock("@/lib/queries", () => ({
     refetch: vi.fn(),
   }),
   useTranscript: () => ({ data: [], isLoading: false, isError: false }),
-  useGenerateNotes: () => ({ mutateAsync: vi.fn(async () => ({})), isPending: false, error: null }),
+  useGenerateNotes: () => notesState,
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -80,6 +86,9 @@ function useDesktopViewport() {
 
 beforeEach(() => {
   window.localStorage.clear();
+  notesState.mutateAsync = vi.fn(async () => ({}));
+  notesState.isPending = false;
+  notesState.error = null;
   useDesktopViewport();
 });
 
@@ -99,5 +108,16 @@ describe("notes page", () => {
     expect(
       screen.getByRole("combobox", { name: "Choose which material to use" }),
     ).toBeInTheDocument();
+  });
+
+  it("offers a retry when generation fails, reusing the chosen material", () => {
+    notesState.error = new Error(
+      "The AI service is temporarily busy. Please try again shortly.",
+    );
+    render(<Notes />);
+
+    expect(screen.getByText(/temporarily busy/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(notesState.mutateAsync).toHaveBeenCalledTimes(1);
   });
 });

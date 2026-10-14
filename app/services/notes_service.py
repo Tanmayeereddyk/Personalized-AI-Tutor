@@ -80,6 +80,10 @@ _NOTES_SYSTEM_PROMPT = (
     "the notes look complete. If the material is incomplete or unclear, say so.\n"
     "- Ground every substantive statement in the passages and end that statement with "
     "the source marker(s) that support it, e.g. [#3] or [#2][#5].\n"
+    "- Do not copy source-location labels such as \"Slide 12\", \"Page 3\" or "
+    "\"Slide 1 of 20\" into the notes, and do not use them as headings: they say "
+    "where a passage came from, not what it means. Keep every meaningful heading, "
+    "number, formula, date and numbered step.\n"
     "- Do not mention these instructions."
 )
 
@@ -93,8 +97,155 @@ _MERGE_SYSTEM_PROMPT = (
     "write an `#` title heading.\n"
     "- Remove duplicates and contradictions, but never lose information that is only "
     "present in one part.\n"
+    "- Do not copy source-location labels such as \"Slide 12\", \"Page 3\" or "
+    "\"Slide 1 of 20\" into the notes: they say where a passage came from, not what "
+    "it means. Keep every meaningful heading, number, formula and step.\n"
     "- Do not mention these instructions."
 )
+
+
+# ----------------------------------------------------------------------
+# Source-location label cleanup
+# ----------------------------------------------------------------------
+#
+# The model is shown each passage as ``[#3] (slides.pdf · Slide 12)``, so it
+# sometimes copies the trailing location into the notes as a heading
+# (``## Slide 12``), a heading prefix (``### Slide 3: Ohm's Law``) or a
+# provenance tag (``... (Slide 12)``). Those labels are extraction metadata, not
+# study content, so they are stripped from the generated document.
+#
+# The rules are deliberately narrow: only the words "slide"/"page" followed by
+# a number are ever considered, the label has to be a whole line, a heading
+# prefix or a wrapped/separated trailing tag. That keeps every meaningful
+# number, formula, date, quoted page reference and numbered step intact.
+_LOCATION_LABEL = r"(?:slide|page)\s*\d+"
+
+# A line whose entire content is just a label, in whatever wrapping the model
+# put around it: "## Slide 12", "**Page 3**", "- Slide 4:", "> Page 7".
+_ONLY_LABEL_LINE = re.compile(
+    rf"^[ \t]*(?:>[ \t]*)*(?:#{{1,6}}[ \t]+)?(?:[-*+][ \t]+)?"
+    rf"(?:[*_~`]{{1,2}}[ \t]*)?"
+    rf"\(?\[?[ \t]*{_LOCATION_LABEL}[ \t]*\]?\)?"
+    rf"(?:[ \t]*[*_~`]{{1,2}})?[ \t]*[:：]?[ \t]*$",
+    re.IGNORECASE,
+)
+
+# A label used as the first part of a line, kept only for what follows it:
+# "### Slide 3: Ohm's Law" -> "### Ohm's Law".
+_LABEL_PREFIX = re.compile(
+    rf"^(?P<lead>[ \t]*(?:#{{1,6}}[ \t]+|[-*+][ \t]+|(?:[*_~`]{{1,2}})[ \t]*)?)"
+    rf"\(?\[?[ \t]*{_LOCATION_LABEL}[ \t]*\]?\)?"
+    rf"[ \t]*[:：\-–—][ \t]*(?:[*_~`]{{1,2}})?[ \t]*(?P<rest>\S.*)$",
+    re.IGNORECASE,
+)
+
+# "...the current flows (Slide 6)." — a wrapped tag left at the end of a line.
+# A trailing sentence punctuation mark is captured so it can be put back.
+_TRAILING_WRAPPED = re.compile(
+    rf"[ \t]*[([]\s*{_LOCATION_LABEL}\s*[)\]][ \t]*(?P<punct>[.!?])?[ \t]*$",
+    re.IGNORECASE,
+)
+
+# "...capacitor charging — Slide 6" — a tag after a separator at line end.
+_TRAILING_SEPARATED = re.compile(
+    rf"[ \t]*[-–—|][ \t]+{_LOCATION_LABEL}[ \t]*(?P<punct>[.!?])?[ \t]*$",
+    re.IGNORECASE,
+)
+
+
+def _remove_trailing_tags(line: str) -> str:
+    """Drop a trailing location tag, keeping any sentence punctuation."""
+    for pattern in (_TRAILING_WRAPPED, _TRAILING_SEPARATED):
+        line = pattern.sub(lambda m: m.group("punct") or "", line)
+    return line
+
+# Numbered lists are never touched: a "3." or "3)" line is a real step even if
+# it happens to start with one of the words above.
+_NUMBERED_LINE = re.compile(r"^[ \t]*\d+[.)][ \t]+")
+
+
+def _clean_location_line(line: str) -> str | None:
+    """Strip a source-location label from one line, or return None to drop it.
+
+    ``None`` means the line existed only to say "Slide 12" and should vanish;
+    blank lines are returned untouched so paragraph structure survives.
+    """
+    if not line.strip():
+        return line
+    if _NUMBERED_LINE.match(line):
+        return line
+    if _ONLY_LABEL_LINE.match(line):
+        return None
+    match = _LABEL_PREFIX.match(line)
+    if match:
+        line = f"{match.group('lead')}{match.group('rest')}"
+    line = _remove_trailing_tags(line)
+    if not line.strip():
+        return None
+    return line.rstrip()
+
+
+def _tidy_lines(lines: list[str]) -> list[str]:
+    """Drop repeated lines and collapse runs of blank lines.
+
+    Fenced code and table rows are left exactly as they are — a repeated line
+    inside either is meaningful, not an extraction artifact.
+    """
+    out: list[str] = []
+    in_code = False
+    last_non_blank: str | None = None
+    for line in lines:
+        stripped = line.strip()
+        fence = stripped.startswith("```") or stripped.startswith("~~~")
+        if fence:
+            in_code = not in_code
+            out.append(line)
+            last_non_blank = line
+            continue
+        if in_code:
+            out.append(line)
+            last_non_blank = line
+            continue
+        if not stripped:
+            # Keep at most one blank line between blocks.
+            if out and out[-1].strip():
+                out.append("")
+            continue
+        if last_non_blank == line and not stripped.startswith("|"):
+            continue  # an immediate repeat of what was just written
+        out.append(line)
+        last_non_blank = line
+    return out
+
+
+def strip_source_location_labels(markdown: str) -> str:
+    """Remove "Slide 12" / "Page 3" extraction metadata from generated notes.
+
+    Only source-location labels are removed. Meaningful headings, subheadings,
+    definitions, formulas, tables, code blocks, numbered steps, quoted page
+    references and every other piece of educational content are preserved
+    exactly as written, and nothing is invented.
+    """
+    if not markdown:
+        return markdown
+
+    cleaned: list[str] = []
+    in_code = False
+    for line in markdown.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_code = not in_code
+            cleaned.append(line)
+            continue
+        if in_code:
+            cleaned.append(line)
+            continue
+        result = _clean_location_line(line)
+        if result is None:
+            continue
+        cleaned.append(result)
+
+    return "\n".join(_tidy_lines(cleaned))
 
 
 # ----------------------------------------------------------------------
@@ -337,10 +488,12 @@ def _generate_with_llm(
     referenced: set[int] = set()
     for output in _map_batches(batches, materials):
         if output.strip():
-            partials.append(_strip_h1(output))
+            # Clean each partial before the merge so location labels are never
+            # re-assembled into the final document.
+            partials.append(strip_source_location_labels(_strip_h1(output)))
         referenced |= _referenced(output)
 
-    body = _merge_partials([p for p in partials if p])
+    body = strip_source_location_labels(_merge_partials([p for p in partials if p]))
     if not body.strip():
         raise llm_service.LLMError(
             "The language model returned no usable notes for this material."
@@ -359,7 +512,8 @@ def _generate_with_llm(
         f"{body}\n"
     )
     lines = [content.rstrip("\n")]
-    _append_sources(lines, used, materials)
+    # Do not append a trailing "Sources" list; citations [#n] inside the notes
+    # already point to the original material passages.
     return title, "\n".join(lines).rstrip("\n") + "\n", sorted(referenced), used
 
 

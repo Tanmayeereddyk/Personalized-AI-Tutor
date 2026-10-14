@@ -20,6 +20,7 @@ export function CourseTutor({ courseId, courseCode }: { courseId: string; course
       value={draft}
       onValueChange={setDraft}
       onSend={chat.send}
+      onRetry={chat.retry}
       onReset={chat.reset}
     />
   );

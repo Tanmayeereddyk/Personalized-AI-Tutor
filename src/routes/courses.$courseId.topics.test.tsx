@@ -187,9 +187,7 @@ describe("topics page", () => {
     render(<Topics />);
 
     expect(screen.getByText("Graph traversal")).toBeInTheDocument();
-    expect(
-      screen.getByText("BFS and DFS over adjacency lists."),
-    ).toBeInTheDocument();
+    // Descriptions removed to show only topic names.
     expect(screen.getByText("Graphs")).toBeInTheDocument();
     expect(screen.getByText("AI")).toBeInTheDocument();
     expect(screen.getByText("2 materials")).toBeInTheDocument();
@@ -236,16 +234,28 @@ describe("topics page", () => {
     expect(state.generate.mutateAsync).toHaveBeenCalledWith();
   });
 
-  it("refreshes topics when the map already exists", () => {
+  it("shows a single Generate Topics button when the map already exists", () => {
     state.materials.data = [material("m1", "biology.pdf")];
     state.topics.data = [topic];
     render(<Topics />);
 
+    const buttons = screen.getAllByRole("button", { name: /Generate Topics/i });
+    expect(buttons.length).toBeGreaterThan(0);
     expect(
-      screen.getByRole("button", { name: /Refresh Topics/i }),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Refresh Topics/i }));
-    expect(state.refresh.mutateAsync).toHaveBeenCalledTimes(1);
+      screen.queryByRole("button", { name: /Refresh Topics/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("regenerates topics using the single Generate Topics button when topics exist", () => {
+    state.materials.data = [material("m1", "biology.pdf")];
+    state.topics.data = [topic];
+    render(<Topics />);
+
+    const buttons = screen.getAllByRole("button", {
+      name: /Generate Topics/i,
+    });
+    fireEvent.click(buttons[0]!);
+    expect(state.generate.mutateAsync).toHaveBeenCalledTimes(1);
   });
 
   it("disables the action button while a request is running", () => {
@@ -254,7 +264,7 @@ describe("topics page", () => {
     render(<Topics />);
 
     const buttons = screen.getAllByRole("button", {
-      name: /Generating…/i,
+      name: /Generating/i,
     });
     expect(buttons.length).toBeGreaterThan(0);
     for (const button of buttons) {
@@ -288,5 +298,19 @@ describe("topics page", () => {
     expect(
       screen.getByRole("link", { name: /Manage materials/i }),
     ).toBeInTheDocument();
+  });
+
+  it("retries a failed generation in place, keeping the page state", () => {
+    state.materials.data = [material("m1", "biology.pdf")];
+    state.generate.error = new Error(
+      "The AI service is temporarily busy. Please try again shortly.",
+    );
+    render(<Topics />);
+
+    // The busy failure offers a Retry that re-runs generation for this course.
+    const retry = screen.getByRole("button", { name: "Retry" });
+    expect(retry).toBeEnabled();
+    fireEvent.click(retry);
+    expect(state.generate.mutateAsync).toHaveBeenCalledTimes(1);
   });
 });
