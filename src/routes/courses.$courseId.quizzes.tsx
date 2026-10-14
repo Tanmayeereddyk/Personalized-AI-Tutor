@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { ListChecks, Loader2, Sparkles, ClipboardList, Trash2 } from "lucide-react";
+import { ListChecks, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useCreateQuiz, useDeleteQuiz, useQuizzes } from "@/lib/queries";
 import { EmptyState, Modal, PageHeader } from "@/components/ui/kit";
-import { Field, PillGroup, scoreBorder, scoreTone } from "@/components/practice/Builder";
+import { scoreBorder, scoreTone } from "@/components/practice/Builder";
 import { QuizBuilder } from "@/components/practice/QuizBuilder";
 import { QuizRunner } from "@/components/practice/QuizRunner";
 import type { GeneratedQuiz } from "@/lib/quiz";
@@ -15,17 +15,12 @@ export const Route = createFileRoute("/courses/$courseId/quizzes")({
   component: Quizzes,
 });
 
-const blankQuiz = { name: "", topic: "", difficulty: "Medium", score: "0", total: "0" };
-
 export function Quizzes() {
   const { courseId } = Route.useParams();
   const quizzes = useQuizzes(courseId);
   const create = useCreateQuiz(courseId);
   const removeQuiz = useDeleteQuiz(courseId);
   const list = quizzes.data ?? [];
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(blankQuiz);
-
   // The generated quiz lives in local state only; nothing is persisted.
   const [builderOpen, setBuilderOpen] = useState(false);
   const [session, setSession] = useState<GeneratedQuiz | null>(null);
@@ -62,44 +57,16 @@ export function Quizzes() {
     }
   };
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim()) {
-      toast.error("Give the quiz a name.");
-      return;
-    }
-    try {
-      await create.mutateAsync({
-        name: form.name.trim(),
-        topic: form.topic.trim() || undefined,
-        difficulty: form.difficulty,
-        score: Math.max(0, Number(form.score) || 0),
-        total: Math.max(0, Number(form.total) || 0),
-      });
-      toast.success("Quiz attempt saved.");
-      setForm(blankQuiz);
-      setOpen(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not save the quiz.");
-    }
-  };
-
   return (
     <div>
       <PageHeader
         title="Quizzes"
-        subtitle="Generate AI practice from your topics, or log an attempt after class."
+        subtitle="Generate AI practice from your topics and track your results."
         action={
-          <div className="flex flex-wrap items-center gap-2">
-            <button className="btn btn-ghost" onClick={() => setOpen(true)}>
-              <ClipboardList className="h-4 w-4" />
-              Record attempt
-            </button>
-            <button className="btn btn-primary" onClick={() => setBuilderOpen(true)}>
-              <Sparkles className="h-4 w-4" />
-              Generate Quiz
-            </button>
-          </div>
+          <button className="btn btn-primary" onClick={() => setBuilderOpen(true)}>
+            <Sparkles className="h-4 w-4" />
+            Generate Quiz
+          </button>
         }
       />
 
@@ -119,7 +86,7 @@ export function Quizzes() {
         <EmptyState
           icon={ListChecks}
           title="No quizzes attempted yet."
-          body="Generate an AI practice quiz from your topics, or record an attempt to track your score."
+          body="Generate an AI practice quiz from your topics to get started."
           action={
             <button className="btn btn-primary" onClick={() => setBuilderOpen(true)}>
               <Sparkles className="h-4 w-4" />
@@ -176,73 +143,6 @@ export function Quizzes() {
           })}
         </div>
       )}
-
-      <Modal
-        open={open}
-        onOpenChange={setOpen}
-        title="Record a Quiz"
-        description="Log a quiz attempt for this course."
-      >
-        <form onSubmit={submit} className="space-y-4">
-          <Field label="Quiz name">
-            <input
-              className="field"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g. Sorting Algorithms"
-              autoFocus
-            />
-          </Field>
-          <Field label="Topic (optional)">
-            <input
-              className="field"
-              value={form.topic}
-              onChange={(e) => setForm({ ...form, topic: e.target.value })}
-              placeholder="e.g. Recursion"
-            />
-          </Field>
-          <Field label="Difficulty">
-            <PillGroup
-              options={["Easy", "Medium", "Hard"]}
-              value={form.difficulty}
-              onChange={(v) => setForm({ ...form, difficulty: v })}
-            />
-          </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Score">
-              <input
-                type="number"
-                min={0}
-                className="field"
-                value={form.score}
-                onChange={(e) => setForm({ ...form, score: e.target.value })}
-              />
-            </Field>
-            <Field label="Total questions">
-              <input
-                type="number"
-                min={0}
-                className="field"
-                value={form.total}
-                onChange={(e) => setForm({ ...form, total: e.target.value })}
-              />
-            </Field>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => setOpen(false)}
-              disabled={create.isPending}
-            >
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={create.isPending}>
-              {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}Save quiz
-            </button>
-          </div>
-        </form>
-      </Modal>
 
       {/* Confirm before a quiz is permanently deleted. */}
       <Modal
