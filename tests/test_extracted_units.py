@@ -287,7 +287,7 @@ def test_unsupported_material_records_warning_and_attention_status(client) -> No
     headers = _signup(client, "erin@example.com")
     course = _create_course(client, headers)
     material = _upload(
-        client, headers, course["id"], "notes.doc", b"not a real document", "application/msword"
+        client, headers, course["id"], "notes.xlsx", b"not a real spreadsheet", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     assert material["type"] == "doc"
 

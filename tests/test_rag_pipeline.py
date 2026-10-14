@@ -474,8 +474,8 @@ def test_generate_notes_explains_an_unsupported_material(client, fake_supabase) 
     course = _create_course(client, headers)
     user_id = next(iter(fake_supabase.auth.users))
     material_id = _seed_material(
-        fake_supabase, user_id, course["id"], "handout.docx", b"not extractable",
-        material_type="doc", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        fake_supabase, user_id, course["id"], "handout.xlsx", b"not extractable",
+        material_type="doc", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
     response = client.post(

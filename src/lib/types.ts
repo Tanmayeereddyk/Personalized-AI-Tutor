@@ -34,6 +34,35 @@ export interface Material {
   mimeType?: string | undefined;
 }
 
+/** How the material viewer should render an inline preview. */
+export type PreviewMode = "pdf" | "slides" | "text" | "none";
+export type PreviewStatus =
+  | "none"
+  | "processing"
+  | "ready"
+  | "failed"
+  | "unsupported";
+
+export interface PreviewSlide {
+  number: number;
+  text: string;
+  imageUrl?: string | null;
+}
+
+/**
+ * The inline preview for a material. Presentations become a
+ * PDF the existing viewer renders (or a slide-by-slide text
+ * fallback); documents become a PDF or their extracted text.
+ */
+export interface MaterialPreview {
+  status: PreviewStatus;
+  mode: PreviewMode;
+  url?: string | null;
+  slides: PreviewSlide[];
+  text?: string | null;
+  message?: string | null;
+}
+
 /** content_type values the live extracted_units table actually accepts. */
 export type ExtractedUnitContentType = "text" | "table" | "transcript" | "image" | "diagram";
 /** status values the live extracted_units table actually accepts. */

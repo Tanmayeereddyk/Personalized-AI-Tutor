@@ -25,6 +25,7 @@ import { useLayout } from "@/lib/layout";
 import { FullScreenPage } from "@/components/layout/FullScreenPage";
 import { EmptyState } from "@/components/ui/kit";
 import { AudioTranscript } from "@/components/materials/AudioTranscript";
+import { PreviewPane } from "@/components/materials/PreviewPane";
 import { CourseTutor } from "@/components/tutor/CourseTutor";
 import { NotesPanel } from "@/components/tutor/NotesPanel";
 import { useMediaQuery } from "@/lib/use-media-query";
@@ -679,6 +680,8 @@ function WorkspaceLayout({
 
 function canPreview(material: Material): boolean {
   if (material.type === "pdf") return true;
+  if (material.type === "ppt") return true;
+  if (material.type === "doc") return true;
   if (material.mimeType?.startsWith("image/")) return true;
   if (material.type === "video") return true;
   return false;
@@ -765,6 +768,8 @@ function Reader({
       <div className="flex min-h-0 flex-1 overflow-auto bg-surface-2">
         {material.type === "pdf" ? (
           <iframe key={key} src={url} title={material.name} className="h-full w-full" />
+        ) : material.type === "ppt" || material.type === "doc" ? (
+          <PreviewPane material={material} />
         ) : material.type === "video" ? (
           <VideoReader material={material} session={session} url={url} />
         ) : (

@@ -18,6 +18,7 @@ import type {
   IndexStatus,
   Material,
   MaterialChunk,
+  MaterialPreview,
   Note,
   Quiz,
   TutorAnswer,
@@ -311,6 +312,21 @@ interface MaterialDto {
   updated_at: string | null;
 }
 
+interface PreviewSlideDto {
+  number: number;
+  text: string;
+  image_url: string | null;
+}
+
+interface MaterialPreviewDto {
+  status: string;
+  mode: string;
+  url: string | null;
+  slides: PreviewSlideDto[];
+  text: string | null;
+  message: string | null;
+}
+
 interface ExtractedUnitDto {
   id: string;
   material_id: string;
@@ -500,6 +516,19 @@ export const toMaterial = (dto: MaterialDto): Material => ({
   added: `Added ${friendlyDate(dto.created_at)}`,
   status: (dto.status as Material["status"]) ?? "ready",
   mimeType: dto.mime_type ?? undefined,
+});
+
+export const toMaterialPreview = (dto: MaterialPreviewDto): MaterialPreview => ({
+  status: (dto.status as MaterialPreview["status"]) ?? "none",
+  mode: (dto.mode as MaterialPreview["mode"]) ?? "none",
+  url: dto.url ?? null,
+  slides: (dto.slides ?? []).map((slide) => ({
+    number: slide.number,
+    text: slide.text,
+    imageUrl: slide.image_url ?? null,
+  })),
+  text: dto.text ?? null,
+  message: dto.message ?? null,
 });
 
 export const toExtractedUnit = (dto: ExtractedUnitDto): ExtractedUnit => ({
@@ -782,6 +811,27 @@ export const api = {
     async url(id: string): Promise<string> {
       const dto = await request<{ url: string }>(`/api/materials/${id}/url`);
       return dto.url;
+    },
+    /**
+     * The current inline preview for a material (presentations render
+     * as a PDF, or fall back to slide text). Poll while `processing`.
+     */
+    async previewStatus(id: string): Promise<MaterialPreview> {
+      return toMaterialPreview(
+        await request<MaterialPreviewDto>(`/api/materials/${id}/preview`),
+      );
+    },
+    /**
+     * Idempotently start preparing a presentation's inline preview.
+     * Conversion runs server-side in the background; the returned
+     * status is the immediate state (usually `processing`).
+     */
+    async startPreview(id: string): Promise<MaterialPreview> {
+      return toMaterialPreview(
+        await request<MaterialPreviewDto>(`/api/materials/${id}/preview`, {
+          method: "POST",
+        }),
+      );
     },
     /** How many chunks are indexed for this material (owner only). */
     async indexStatus(materialId: string): Promise<IndexStatus> {

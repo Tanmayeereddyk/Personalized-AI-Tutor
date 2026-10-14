@@ -3,6 +3,7 @@ import { Download, ExternalLink, FileWarning, Loader2 } from "lucide-react";
 
 import { api } from "@/lib/api";
 import { AudioTranscript } from "@/components/materials/AudioTranscript";
+import { PreviewPane } from "@/components/materials/PreviewPane";
 import { useExtractionStatus, useTranscript } from "@/lib/queries";
 import type { Material } from "@/lib/types";
 
@@ -10,6 +11,8 @@ type UrlState = "idle" | "loading" | "ready" | "error";
 
 function canPreview(material: Material): boolean {
   if (material.type === "pdf") return true;
+  if (material.type === "ppt") return true;
+  if (material.type === "doc") return true;
   if (material.mimeType?.startsWith("image/")) return true;
   if (material.type === "video") return true;
   return false;
@@ -144,6 +147,8 @@ export function MaterialViewer({
           </div>
         ) : material.type === "pdf" ? (
           <iframe src={url} title={material.name} className="h-full w-full" />
+        ) : material.type === "ppt" || material.type === "doc" ? (
+          <PreviewPane material={material} />
         ) : material.type === "video" ? (
           <VideoReader
             material={material}

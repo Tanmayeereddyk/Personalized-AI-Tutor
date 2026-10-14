@@ -182,6 +182,43 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
+### Step 2b — (Optional) Install LibreOffice for Office previews
+
+A `.pptx`/`.ppt`/`.docx`/`.doc` can't be rendered by a browser, so
+the backend converts it to a PDF locally (headless) and shows it in
+the existing PDF viewer. LibreOffice also converts a legacy `.doc`
+to `.docx` so its text can be extracted. The file never leaves your
+machine — no external conversion service is used.
+
+```powershell
+winget install TheDocumentFoundation.LibreOffice
+```
+
+| Platform | Command |
+| --- | --- |
+| Windows | `winget install TheDocumentFoundation.LibreOffice` |
+| macOS | `brew install --cask libreoffice` |
+| Debian/Ubuntu | `sudo apt-get install -y libreoffice` |
+
+Without LibreOffice: `.pptx`/`.docx`/`.txt` still preview as
+extracted text, and `.docx`/`.txt` still extract and generate
+notes. Only the rendered-PDF preview and legacy `.doc` extraction
+need LibreOffice. Point `LIBREOFFICE_PATH` at the binary only if
+it lives somewhere non-standard.
+
+> **Supported material formats**
+>
+> | Format | Extracts text | Inline preview | Generates notes |
+> | --- | --- | --- | --- |
+> | `.pdf` | ✅ | ✅ PDF | ✅ |
+> | `.pptx` | ✅ (per slide) | ✅ PDF / slide text | ✅ |
+> | `.docx` | ✅ | ✅ PDF / text | ✅ |
+> | `.txt` | ✅ | ✅ text | ✅ |
+> | video (audio) | ✅ transcript | ✅ player | ✅ |
+> | `.ppt` (legacy) | ❌ | ✅ PDF (LibreOffice) | ❌ |
+> | `.doc` (legacy) | ⚠️ needs LibreOffice | ✅ PDF (LibreOffice) | ⚠️ needs LibreOffice |
+> | anything else | ❌ | ❌ | ❌ |
+
 ### Step 3 — Start the frontend (separate terminal)
 
 The frontend dependencies are already installed (`node_modules/`). If not:
@@ -239,6 +276,23 @@ in Python files or put them in the README.
 
 This creates `profiles` and `courses`, the indexes, the `updated_at` trigger,
 and all Row Level Security policies. You should see `Success. No rows returned`.
+
+Then apply the incremental migrations in order (they are idempotent —
+safe to re-run):
+
+```text
+database/migrations/002_user_data_ownership.sql
+database/migrations/003_extracted_units_integration.sql
+database/migrations/004_materials_bucket_size_limit.sql
+database/migrations/005_rag_pipeline.sql
+database/migrations/006_material_preview.sql
+```
+
+`006` adds the optional `preview_path` / `preview_status` / `preview_error`
+columns used to cache a converted PowerPoint preview. The preview feature
+keeps working (it re-converts when needed) even if this migration has not
+been applied yet, because the converted PDF's existence in storage is the
+durable cache marker.
 
 > Tip: under **Authentication → Providers → Email**, you can disable
 > "Confirm email" while developing, so signup returns a token immediately.

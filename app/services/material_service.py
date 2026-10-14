@@ -17,7 +17,12 @@ from fastapi import HTTPException
 from supabase import Client, PostgrestAPIError
 
 from app.schemas.material import MaterialResponse, MaterialUpdate
-from app.services import extracted_unit_service, owned_service, rag_service
+from app.services import (
+    extracted_unit_service,
+    owned_service,
+    preview_service,
+    rag_service,
+)
 
 BUCKET = "materials"
 
@@ -156,7 +161,7 @@ def material_url(client: Client, user_id: str, material_id: str, expires_in: int
 
 
 def delete_material(client: Client, user_id: str, material_id: str) -> None:
-    """Delete the row, its extracted units, its RAG chunks and its stored object.
+    """Delete the row, its extracted units, its RAG chunks and its stored objects.
 
     Saved notes are deliberately *not* touched: they are the user's own content
     and survive the material, so the tutor can still answer from them (citing
@@ -172,8 +177,12 @@ def delete_material(client: Client, user_id: str, material_id: str) -> None:
 
     owned_service.delete_item(client, user_id, "materials", material_id)
 
+    # The original file and its optional converted preview share the material's
+    # storage folder; remove both so nothing is orphaned in the bucket.
+    paths = [row.get("preview_path") or preview_service.preview_path(row)]
     if path:
-        try:
-            client.storage.from_(BUCKET).remove([path])
-        except Exception:  # noqa: BLE001 - the row is gone either way
-            pass
+        paths.append(path)
+    try:
+        client.storage.from_(BUCKET).remove(paths)
+    except Exception:  # noqa: BLE001 - the row is gone either way
+        pass

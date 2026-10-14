@@ -58,6 +58,10 @@ create table if not exists public.materials (
     size_bytes   bigint,
     mime_type    text,
     storage_path text,
+    -- Optional inline-preview cache (presentation → PDF). See migration 006.
+    preview_path   text,
+    preview_status text not null default 'none',
+    preview_error  text,
     status       text not null default 'ready',
     created_at   timestamptz not null default now(),
     updated_at   timestamptz not null default now()

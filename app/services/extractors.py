@@ -34,6 +34,11 @@ from fastapi import HTTPException
 from supabase import Client
 
 from app.services import extracted_unit_service
+from app.services.office_conversion import (
+    OfficeConversionError,
+    convert_to,
+    find_soffice,
+)
 
 BUCKET = "materials"
 
@@ -379,6 +384,123 @@ def extract_pptx(client: Client, material: dict, content: bytes) -> ExtractorRes
 
 
 # ----------------------------------------------------------------------
+# Documents (Word / plain text)
+# ----------------------------------------------------------------------
+
+def _render_docx_table(table) -> str:
+    """Render a Word table as simple text so it survives round-tripping."""
+    lines = []
+    for row in table.rows:
+        cells = [cell.text.strip() for cell in row.cells]
+        lines.append(" | ".join(cells))
+    return "\n".join(lines)
+
+
+def _docx_text(content: bytes) -> str:
+    """All readable text from a .docx (paragraphs + tables)."""
+    from docx import Document  # type: ignore[import-not-found]
+
+    document = Document(io.BytesIO(content))
+    parts: list[str] = []
+    for paragraph in document.paragraphs:
+        text = (paragraph.text or "").strip()
+        if text:
+            parts.append(text)
+    for table in document.tables:
+        rendered = _render_docx_table(table)
+        if rendered:
+            parts.append(rendered)
+    return "\n\n".join(parts)
+
+
+def extract_docx(client: Client, material: dict, content: bytes) -> ExtractorResult:
+    """Extract text from a Word .docx file."""
+    try:
+        from docx import Document  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise UnsupportedFormatError(
+            "DOCX extraction requires the 'python-docx' package, "
+            "which is not installed.",
+        ) from exc
+
+    try:
+        text = _docx_text(content)
+    except Exception as exc:  # noqa: BLE001 - malformed files are a user error
+        raise UnsupportedFormatError(f"Could not open the document: {exc}") from exc
+
+    units: list[dict] = []
+    if text:
+        units.append(
+            _base_unit(
+                material,
+                content_type="text",
+                content=text,
+                extraction_method="docx_text",
+                status="extracted",
+                unit_order=10,
+                metadata={"source": "docx_text"},
+            )
+        )
+    warnings = [] if text else ["The document has no extractable text."]
+    return ExtractorResult(units=units, warnings=warnings)
+
+
+def _decode_text(content: bytes) -> str:
+    """Decode plain-text bytes, tolerating non-UTF-8 encodings."""
+    for encoding in ("utf-8", "cp1252"):
+        try:
+            return content.decode(encoding).strip()
+        except UnicodeDecodeError:
+            continue
+    return content.decode("utf-8", errors="replace").strip()
+
+
+def extract_txt(client: Client, material: dict, content: bytes) -> ExtractorResult:
+    """Extract text from a plain-text file."""
+    text = _decode_text(content)
+    units: list[dict] = []
+    if text:
+        units.append(
+            _base_unit(
+                material,
+                content_type="text",
+                content=text,
+                extraction_method="txt_text",
+                status="extracted",
+                unit_order=10,
+                metadata={"source": "txt_text"},
+            )
+        )
+    warnings = [] if text else ["The file has no extractable text."]
+    return ExtractorResult(units=units, warnings=warnings)
+
+
+def extract_doc(client: Client, material: dict, content: bytes) -> ExtractorResult:
+    """Extract text from a legacy Word .doc file.
+
+    ``python-docx`` cannot read the old binary format, so the file is
+    converted to .docx with a local LibreOffice first. Without
+    LibreOffice the extraction degrades to a clear warning.
+    """
+    soffice = find_soffice()
+    if not soffice:
+        raise UnsupportedFormatError(
+            "Legacy .doc extraction needs LibreOffice on the server, "
+            "which is not installed. Convert the file to .docx first.",
+        )
+
+    try:
+        docx_bytes = convert_to(
+            soffice, content, material.get("name") or "document.doc", "docx"
+        )
+    except OfficeConversionError as exc:
+        raise UnsupportedFormatError(f"Could not convert the .doc file: {exc}") from exc
+
+    # Reuse the .docx engine on the converted bytes.
+    return extract_docx(client, material, docx_bytes)
+
+
+# ----------------------------------------------------------------------
 # Video
 # ----------------------------------------------------------------------
 
@@ -703,16 +825,26 @@ def run_extractor(
         return extract_pptx(client, material, content)
     if material_type == "video":
         return extract_video(client, material, content, on_stage=on_stage)
+    if material_type == "doc":
+        name = (material.get("name") or "").lower()
+        if name.endswith(".docx"):
+            return extract_docx(client, material, content)
+        if name.endswith(".txt"):
+            return extract_txt(client, material, content)
+        if name.endswith(".doc"):
+            return extract_doc(client, material, content)
+        return ExtractorResult(
+            units=[],
+            warnings=[
+                f"Extraction is not implemented for this document type "
+                f"('{name}')."
+            ],
+        )
     return ExtractorResult(
         units=[],
         warnings=[
-            f"Extraction is not implemented for this file type ('{material_type}')."
-        ],
-    )
-    return ExtractorResult(
-        units=[],
-        warnings=[
-            f"Extraction is not implemented for this file type ('{material_type}')."
+            f"Extraction is not implemented for this file type "
+            f"('{material_type}')."
         ],
     )
 

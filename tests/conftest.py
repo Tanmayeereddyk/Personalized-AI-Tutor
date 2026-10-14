@@ -329,6 +329,18 @@ class FakeStorageBucket:
         self._client.stored_objects[f"{self._name}/{path}"] = content
         return SimpleNamespace(path=path)
 
+    def list(self, path: str = "", options: dict | None = None) -> list[dict]:
+        """List objects directly under ``path`` (one level deep)."""
+        prefix = f"{self._name}/{path}".rstrip("/")
+        entries: dict[str, dict] = {}
+        for key in self._client.stored_objects:
+            if not key.startswith(prefix + "/"):
+                continue
+            rest = key[len(prefix) + 1:]
+            name = rest.split("/", 1)[0]
+            entries.setdefault(name, {"name": name})
+        return list(entries.values())
+
     def download(self, path: str) -> bytes:
         key = f"{self._name}/{path}"
         if key not in self._client.stored_objects:

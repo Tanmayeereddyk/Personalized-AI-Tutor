@@ -50,6 +50,41 @@ export const useDeleteMaterial = (courseId: string) => {
 };
 
 // ------------------------------------------------------------------
+// Material preview (presentations → PDF / slides)
+// ------------------------------------------------------------------
+
+/** Polls a material's inline preview while it is being prepared. */
+export const useMaterialPreview = (materialId: string, enabled = true) => {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["material-preview", user?.id, materialId],
+    queryFn: () => api.materials.previewStatus(materialId),
+    enabled: !!user && !!materialId && enabled,
+    refetchInterval: (query) =>
+      query.state.data?.status === "processing" ? 1500 : false,
+  });
+};
+
+/**
+ * Idempotently start preparing a presentation's inline preview.
+ * The returned status is written straight into the preview cache so
+ * the polling query picks it up immediately.
+ */
+export const useStartMaterialPreview = (materialId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.materials.startPreview(materialId),
+    onSuccess: (data) => {
+      queryClient.setQueryData(
+        ["material-preview", user?.id, materialId],
+        data,
+      );
+    },
+  });
+};
+
+// ------------------------------------------------------------------
 // Extraction
 // ------------------------------------------------------------------
 

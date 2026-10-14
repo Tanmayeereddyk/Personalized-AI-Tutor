@@ -24,7 +24,8 @@ from supabase import Client
 from app.api.dependencies import get_current_user, get_service_supabase
 from app.schemas.auth import AuthUser
 from app.schemas.material import MaterialResponse, MaterialUpdate
-from app.services import extraction_service, material_service
+from app.schemas.preview import PreviewStatusResponse
+from app.services import extraction_service, material_service, preview_service
 
 router = APIRouter(tags=["materials"])
 
@@ -136,3 +137,44 @@ def delete_material(
 ) -> Response:
     material_service.delete_material(db, user.id, material_id)
     return Response(status_code=204)
+
+
+@router.get(
+    "/api/materials/{material_id}/preview",
+    response_model=PreviewStatusResponse,
+)
+def get_material_preview(
+    material_id: str,
+    user: AuthUser = Depends(get_current_user),
+    db: Client = Depends(get_service_supabase),
+) -> PreviewStatusResponse:
+    """The current inline preview for a presentation, without starting work."""
+    return PreviewStatusResponse.model_validate(
+        preview_service.preview_state(db, user.id, material_id)
+    )
+
+
+@router.post(
+    "/api/materials/{material_id}/preview",
+    response_model=PreviewStatusResponse,
+    status_code=202,
+)
+def start_material_preview(
+    material_id: str,
+    background_tasks: BackgroundTasks,
+    user: AuthUser = Depends(get_current_user),
+    db: Client = Depends(get_service_supabase),
+) -> PreviewStatusResponse:
+    """Start (idempotently) preparing a presentation's inline preview.
+
+    The heavy lifting — converting the slides to PDF with a local LibreOffice —
+    runs as a background task; the endpoint returns the moment the work is
+    queued. Re-opening an already-converted material returns immediately and
+    never converts the same unchanged file twice.
+    """
+    state, started = preview_service.begin_preview(db, user.id, material_id)
+    if started:
+        background_tasks.add_task(
+            preview_service.run_preview_conversion, db, user.id, material_id
+        )
+    return PreviewStatusResponse.model_validate(state)
