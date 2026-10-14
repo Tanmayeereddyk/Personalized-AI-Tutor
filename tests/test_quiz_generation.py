@@ -184,16 +184,25 @@ def test_generate_from_one_topic_uses_llm_and_content(
     assert "Photosynthesis" in captured["user"]
     assert "Photosynthesis converts light energy" in captured["user"]
     assert captured["kwargs"].get("json_mode") is True
-    # Every question has the required fields and a real source.
+    # Every question has the required *public* fields and a real source.
     for question in body["questions"]:
         assert question["prompt"]
-        assert question["explanation"]
-        assert question["correct_answer"]
+        assert question["options"] or question["type"] == "short-answer"
         assert question["source"]["material_name"] == "lecture.pdf"
-    mc = next(q for q in body["questions"] if q["type"] == "multiple-choice")
-    assert mc["correct_answer"] in mc["options"]
-    tf = next(q for q in body["questions"] if q["type"] == "true-false")
-    assert tf["correct_answer"] in ("True", "False")
+        # The answer key is never exposed before the student submits.
+        assert "correct_answer" not in question
+        assert "explanation" not in question
+        assert "accepted_answers" not in question
+    # The generated quiz is persisted server-side (with its answer key).
+    assert body["set_id"]
+    stored = fake_supabase.tables["quiz_sets"]
+    assert len(stored) == 1
+    assert stored[0]["id"] == body["set_id"]
+    assert stored[0]["questions"]
+    mc = next(q for q in stored[0]["questions"] if q["type"] == "multiple-choice")
+    assert mc["correct_answer"] in mc["options"]  # key stored for grading
+    # Merely generating a quiz does NOT create a completed attempt.
+    assert fake_supabase.tables.get("quizzes", []) == []
 
 
 def test_generate_from_multiple_topics(client, fake_supabase, logged_in_user, monkeypatch) -> None:

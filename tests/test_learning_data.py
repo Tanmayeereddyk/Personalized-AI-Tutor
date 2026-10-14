@@ -200,6 +200,28 @@ def test_quiz_attempt_persists_answer_details_and_rejects_duplicates(client, log
     assert response.status_code == 422
 
 
+def test_quiz_list_preserves_null_percentage_and_source(
+    client, fake_supabase, logged_in_user
+) -> None:
+    _, headers = logged_in_user
+    course_id = _course(client, headers)
+    quiz = client.post(
+        f"/api/courses/{course_id}/quizzes",
+        json={"name": "Legacy quiz"},
+        headers=headers,
+    ).json()
+    stored = next(row for row in fake_supabase.tables["quizzes"] if row["id"] == quiz["id"])
+    stored["percentage"] = None
+    stored["source"] = None
+
+    response = client.get(f"/api/courses/{course_id}/quizzes", headers=headers)
+
+    assert response.status_code == 200, response.text
+    listed = next(row for row in response.json() if row["id"] == quiz["id"])
+    assert listed["percentage"] is None
+    assert listed["source"] is None
+
+
 def test_quiz_attempt_rejects_topic_from_another_course(client, fake_supabase, logged_in_user) -> None:
     user, headers = logged_in_user
     course_id = _course(client, headers)

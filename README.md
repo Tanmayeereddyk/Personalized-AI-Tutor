@@ -287,6 +287,7 @@ database/migrations/003_extracted_units_integration.sql
 database/migrations/004_materials_bucket_size_limit.sql
 database/migrations/005_rag_pipeline.sql
 database/migrations/006_material_preview.sql
+database/migrations/007_quiz_attempts.sql
 ```
 
 `006` adds the optional `preview_path` / `preview_status` / `preview_error`

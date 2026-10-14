@@ -12,11 +12,28 @@ from fastapi import HTTPException
 from supabase import Client, PostgrestAPIError
 
 
-def _db_error(exc: PostgrestAPIError) -> HTTPException:
-    return HTTPException(
-        status_code=500,
-        detail="Database error. Run database/schema.sql in Supabase first.",
-    )
+def _db_error(exc: PostgrestAPIError, *, table: str | None = None) -> HTTPException:
+    """Map a PostgREST failure to a clear, actionable HTTP error.
+
+    Only a missing table/column is fixed by running the SQL in ``database/``,
+    so name what is missing. A constraint violation or any other failure is a
+    data/transient problem and must not be blamed on the schema.
+    """
+    code = getattr(exc, "code", None)
+    if code in {"42P01", "PGRST205"}:
+        target = f"The '{table}' table" if table else "A required database table"
+        detail = (
+            f"{target} is missing. Run database/schema.sql and the migrations in "
+            "database/migrations/ in your Supabase project, then try again."
+        )
+    elif code in {"42703", "PGRST204"}:
+        detail = (
+            "A required database column is missing. Run the latest migration in "
+            "database/migrations/ in your Supabase project, then try again."
+        )
+    else:
+        detail = "Database error. Please try again."
+    return HTTPException(status_code=500, detail=detail)
 
 
 def ensure_course_owned(client: Client, user_id: str, course_id: str) -> None:
@@ -35,7 +52,7 @@ def ensure_course_owned(client: Client, user_id: str, course_id: str) -> None:
             .execute()
         )
     except PostgrestAPIError as exc:
-        raise _db_error(exc) from exc
+        raise _db_error(exc, table="courses") from exc
 
     if getattr(result, "data", None) is None:
         raise HTTPException(status_code=404, detail="Course not found")
@@ -59,7 +76,7 @@ def list_items(
     try:
         result = query.order(order_by, desc=True).execute()
     except PostgrestAPIError as exc:
-        raise _db_error(exc) from exc
+        raise _db_error(exc, table=table) from exc
     return list(result.data or [])
 
 
@@ -75,7 +92,7 @@ def get_item(client: Client, user_id: str, table: str, item_id: str) -> dict:
             .execute()
         )
     except PostgrestAPIError as exc:
-        raise _db_error(exc) from exc
+        raise _db_error(exc, table=table) from exc
 
     data = getattr(result, "data", None)
     if data is None:
@@ -89,7 +106,7 @@ def create_item(client: Client, user_id: str, table: str, values: dict) -> dict:
     try:
         result = client.table(table).insert(payload).execute()
     except PostgrestAPIError as exc:
-        raise _db_error(exc) from exc
+        raise _db_error(exc, table=table) from exc
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Could not create record")
@@ -112,7 +129,7 @@ def update_item(
             .execute()
         )
     except PostgrestAPIError as exc:
-        raise _db_error(exc) from exc
+        raise _db_error(exc, table=table) from exc
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Not found")
@@ -130,7 +147,7 @@ def delete_item(client: Client, user_id: str, table: str, item_id: str) -> None:
             .execute()
         )
     except PostgrestAPIError as exc:
-        raise _db_error(exc) from exc
+        raise _db_error(exc, table=table) from exc
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Not found")

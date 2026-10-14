@@ -23,7 +23,6 @@ import logging
 import re
 import threading
 import time
-import uuid
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -589,16 +588,50 @@ def generate_quiz(
 
     topic_names = [(topic.get("name") or "").strip() or "Topic" for topic in topics]
     used_types = list(dict.fromkeys(question["type"] for question in questions))
+    title = _title(topic_names)
+    scope_label = " · ".join(topic_names)
+    generated_at = datetime.now(timezone.utc).isoformat()
+    question_types = used_types or requested_types or list(QUESTION_TYPES)
+
+    # Persist the quiz WITH its answer key. The browser only ever receives the
+    # public question shape, so the correct answers stay server-side until the
+    # student submits (see app.services.quiz_attempt_service).
+    quiz_set = owned_service.create_item(
+        client,
+        user_id,
+        "quiz_sets",
+        {
+            "course_id": course_id,
+            "title": title,
+            "scope_label": scope_label,
+            "topic_ids": [topic["id"] for topic in topics],
+            "topic_names": topic_names,
+            "material_ids": sorted(
+                {
+                    str(chunk.get("material_id"))
+                    for chunk in scoped
+                    if chunk.get("material_id")
+                }
+            ),
+            "difficulty": difficulty,
+            "question_types": question_types,
+            "timer_minutes": timer_minutes,
+            "questions": questions,
+            "generated_at": generated_at,
+        },
+    )
+
     return {
-        "id": f"quiz-{uuid.uuid4()}",
+        "id": quiz_set["id"],
+        "set_id": quiz_set["id"],
         "course_id": course_id,
-        "title": _title(topic_names),
-        "scope_label": " · ".join(topic_names),
+        "title": title,
+        "scope_label": scope_label,
         "topic_ids": [topic["id"] for topic in topics],
         "topic_names": topic_names,
         "difficulty": difficulty,
-        "question_types": used_types or requested_types or list(QUESTION_TYPES),
+        "question_types": question_types,
         "timer_minutes": timer_minutes,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": generated_at,
         "questions": questions,
     }

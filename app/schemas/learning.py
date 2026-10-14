@@ -68,6 +68,9 @@ class QuizUpdate(BaseModel):
 
 
 class QuizResponse(BaseModel):
+    """A quiz attempt. AI attempts carry the extra attempt metadata; manually
+    recorded ones may have answer details without the generated answer key."""
+
     id: str
     user_id: str
     course_id: str
@@ -76,7 +79,14 @@ class QuizResponse(BaseModel):
     difficulty: str = "Medium"
     score: int = 0
     total: int = 0
-    answers: list[QuizAnswer] = Field(default_factory=list)
+    # AI submissions store question_id -> submitted answer; manually logged
+    # attempts may store validated per-question answer details.
+    answers: dict[str, str] | list[QuizAnswer] = Field(default_factory=dict)
+    percentage: int | None = None
+    quiz_set_id: str | None = None
+    scope_label: str | None = None
+    source: str | None = None
+    submitted_at: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
 
