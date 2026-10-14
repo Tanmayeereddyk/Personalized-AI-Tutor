@@ -229,9 +229,24 @@ def strip_source_location_labels(markdown: str) -> str:
     if not markdown:
         return markdown
 
+    # Older versions appended a trailing source list to saved generated notes.
+    # Remove it during regeneration while keeping structured provenance stored
+    # separately on the note record.
+    lines = markdown.split("\n")
+    sources_heading = re.compile(r"^\s*#{1,6}\s+sources\s*$", re.IGNORECASE)
+    sources_index = next(
+        (i for i in range(len(lines) - 1, -1, -1) if sources_heading.match(lines[i])),
+        None,
+    )
+    if sources_index is not None and all(
+        not line.strip() or re.match(r"^\s*[-*+]\s+", line)
+        for line in lines[sources_index + 1:]
+    ):
+        lines = lines[:sources_index]
+
     cleaned: list[str] = []
     in_code = False
-    for line in markdown.split("\n"):
+    for line in lines:
         stripped = line.strip()
         if stripped.startswith("```") or stripped.startswith("~~~"):
             in_code = not in_code
@@ -268,25 +283,6 @@ def _scope_title(materials: dict[str, dict], single_material_id: str | None) -> 
     if single_material_id:
         return f"{_material_name(materials, single_material_id)} — Notes"
     return "Course Notes"
-
-
-def _append_sources(lines: list[str], used: list[dict], materials: dict[str, dict]) -> None:
-    """Append a de-duplicated 'Sources' list pointing at real chunks."""
-    seen: set[tuple] = set()
-    entries: list[str] = []
-    for chunk in used:
-        key = (chunk.get("material_id"), citations.chunk_locator(chunk))
-        if key in seen:
-            continue
-        seen.add(key)
-        entries.append(
-            f"- {_material_name(materials, chunk.get('material_id'))} · "
-            f"{citations.chunk_locator(chunk)}"
-        )
-    if entries:
-        lines.append("")
-        lines.append("## Sources")
-        lines.extend(entries)
 
 
 def _indexable_unit_count(client: Client, user_id: str, scope: list[str]) -> int:
@@ -511,10 +507,9 @@ def _generate_with_llm(
         "drawn from the cited passages._\n\n"
         f"{body}\n"
     )
-    lines = [content.rstrip("\n")]
     # Do not append a trailing "Sources" list; citations [#n] inside the notes
     # already point to the original material passages.
-    return title, "\n".join(lines).rstrip("\n") + "\n", sorted(referenced), used
+    return title, strip_source_location_labels(content), sorted(referenced), used
 
 
 def _find_existing_generated_note(

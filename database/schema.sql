@@ -228,6 +228,7 @@ create table if not exists public.flashcard_decks (
     id         uuid primary key default gen_random_uuid(),
     user_id    uuid not null references auth.users (id) on delete cascade,
     course_id  uuid not null references public.courses (id) on delete cascade,
+    name       text,
     topic      text not null default 'General',
     card_count integer not null default 0,
     created_at timestamptz not null default now(),
@@ -238,6 +239,8 @@ create table if not exists public.flashcards (
     id         uuid primary key default gen_random_uuid(),
     user_id    uuid not null references auth.users (id) on delete cascade,
     deck_id    uuid not null references public.flashcard_decks (id) on delete cascade,
+    topic_id   uuid references public.topics (id) on delete set null,
+    topic      text,
     front      text not null,
     back       text not null,
     created_at timestamptz not null default now()

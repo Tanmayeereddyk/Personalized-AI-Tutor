@@ -98,7 +98,7 @@ _SYSTEM_PROMPT = (
     "explanations outside the JSON, no Markdown code fences):\n"
     '{"questions": [{"type": "multiple-choice", "prompt": "...", '
     '"options": ["...", "..."], "correct_answer": "...", '
-    '"explanation": "...", "source_indexes": [1]}]}'
+    '"explanation": "...", "source_indexes": [1], "topic_id": "<provided topic id>"}]}'
 )
 
 # One in-flight generation per (user, course): a double click or two tabs must
@@ -307,6 +307,7 @@ def _build_question(
     index: int,
     passage_chunks: dict[int, dict],
     materials: dict[str, dict],
+    allowed_topic_ids: set[str],
 ) -> dict | None:
     """Validate one raw model entry into a question, or ``None`` if unusable."""
     if not isinstance(raw, dict):
@@ -380,6 +381,7 @@ def _build_question(
 
     return {
         "id": f"q{index}",
+        "topic_id": raw.get("topic_id") if str(raw.get("topic_id")) in allowed_topic_ids else None,
         "type": qtype,
         "prompt": prompt,
         "options": options if qtype != "short-answer" else None,
@@ -397,6 +399,7 @@ def _questions_from_data(
     limit: int,
     passage_chunks: dict[int, dict],
     materials: dict[str, dict],
+    allowed_topic_ids: set[str],
 ) -> list[dict]:
     """Validate raw parsed JSON into unique, complete questions."""
     if isinstance(data, dict):
@@ -408,7 +411,8 @@ def _questions_from_data(
     seen: set[str] = set()
     for raw in data:
         question = _build_question(
-            raw, index=len(questions) + 1, passage_chunks=passage_chunks, materials=materials
+            raw, index=len(questions) + 1, passage_chunks=passage_chunks, materials=materials,
+            allowed_topic_ids=allowed_topic_ids,
         )
         if question is None or question["type"] not in allowed_types:
             continue
@@ -429,6 +433,7 @@ def _parse_questions(
     limit: int,
     passage_chunks: dict[int, dict],
     materials: dict[str, dict],
+    allowed_topic_ids: set[str],
 ) -> list[dict]:
     """Turn the model's reply into validated questions, repairing common drift.
 
@@ -454,6 +459,7 @@ def _parse_questions(
             limit=limit,
             passage_chunks=passage_chunks,
             materials=materials,
+            allowed_topic_ids=allowed_topic_ids,
         )
         if questions:
             return questions
@@ -554,6 +560,7 @@ def generate_quiz(
             f"Allowed question types: {', '.join(sorted(allowed_types))}.\n\n"
             "Topics to cover:\n"
             f"{_topic_lines(topics)}\n\n"
+            "For each question, include topic_id using exactly one provided topic id when supported by the source; otherwise use null.\n\n"
             "Source passages (use ONLY these; cite them by [#n]):\n"
             f"{source}"
         )
@@ -574,6 +581,7 @@ def generate_quiz(
             limit=count,
             passage_chunks=passage_chunks,
             materials=materials,
+            allowed_topic_ids={str(topic["id"]) for topic in topics},
         )
     finally:
         _end_generation(key)

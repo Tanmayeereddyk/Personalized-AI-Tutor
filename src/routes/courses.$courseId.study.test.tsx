@@ -92,6 +92,7 @@ vi.mock("@/lib/queries", () => ({
     error: null,
     refetch: vi.fn(),
   }),
+  useDeleteNote: () => ({ mutateAsync: vi.fn(async () => {}), isPending: false }),
   useGenerateNotes: () => ({ mutateAsync: vi.fn(async () => ({})), isPending: false }),
   useExtractionStatus: () => ({ data: { status: "ready", stage: null, warnings: [] } }),
   useTranscript: () => ({ data: [], isLoading: false, isError: false }),

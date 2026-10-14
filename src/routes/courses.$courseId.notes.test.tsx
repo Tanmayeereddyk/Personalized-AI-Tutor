@@ -30,6 +30,7 @@ vi.mock("@/lib/store", () => ({
 }));
 
 vi.mock("@/lib/queries", () => ({
+  useDeleteNote: () => notesState,
   useMaterials: () => ({
     data: [
       {

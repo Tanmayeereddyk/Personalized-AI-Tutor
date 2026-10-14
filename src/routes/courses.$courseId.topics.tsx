@@ -16,11 +16,13 @@ import { ApiError } from "@/lib/api";
 import {
   useGenerateTopics,
   useMaterials,
+  useQuizzes,
   useTopics,
 } from "@/lib/queries";
 import type { Topic } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { EmptyState, PageHeader } from "@/components/ui/kit";
+import { EmptyState, PageHeader, ProgressBar } from "@/components/ui/kit";
+import { calculateMastery } from "@/lib/mastery";
 
 export const Route = createFileRoute("/courses/$courseId/topics")({
   component: Topics,
@@ -45,6 +47,7 @@ export function Topics() {
   const { courseId } = Route.useParams();
   const topics = useTopics(courseId);
   const materials = useMaterials(courseId);
+  const quizzes = useQuizzes(courseId);
   const generate = useGenerateTopics(courseId);
   const navigate = useNavigate();
 
@@ -219,6 +222,7 @@ export function Topics() {
             <TopicRow
               key={topic.id}
               topic={topic}
+              mastery={calculateMastery(quizzes.data ?? [], topic.id)}
               selected={selected?.id === topic.id}
               materialNames={materialNames}
               onSelect={() => selectTopic(topic)}
@@ -232,11 +236,13 @@ export function Topics() {
 
 function TopicRow({
   topic,
+  mastery,
   selected,
   materialNames,
   onSelect,
 }: {
   topic: Topic;
+  mastery: ReturnType<typeof calculateMastery>;
   selected: boolean;
   materialNames: Map<string, string>;
   onSelect: () => void;
@@ -281,6 +287,16 @@ function TopicRow({
         {topic.prerequisite && (
           <span className="chip">Needs {topic.prerequisite}</span>
         )}
+      </div>
+
+      <div className="flex items-center gap-2 px-3 pb-3">
+        <span className="w-24 shrink-0 text-xs text-muted-foreground">Topic mastery</span>
+        {mastery ? (
+          <>
+            <ProgressBar value={mastery.percent} className="h-1.5 flex-1" />
+            <span className="w-10 text-right font-mono text-xs">{mastery.percent}%</span>
+          </>
+        ) : <span className="text-xs text-muted-foreground">Not attempted</span>}
       </div>
 
       {selected && (

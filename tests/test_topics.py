@@ -395,14 +395,15 @@ def test_topic_source_material_ids_follow_cited_passages(
         contents=["Cell division produces two daughter cells."],
     )
 
-    # The model cites both passages; both materials must map back. (Chunk
-    # ordering is by material id, which is a random UUID, so cite both to keep
-    # the assertion independent of that ordering.)
+    # Passages are ordered by material UUID, so #1 is not necessarily the first
+    # file uploaded (UUIDs are random). Cite the passage that actually belongs
+    # to first.pdf to verify the material mapping rather than upload ordering.
+    first_passage = 1 if first < second else 2
     monkeypatch.setattr(
         llm_service,
         "complete",
         lambda system, user, **kwargs: json.dumps(
-            {"topics": [{"name": "Photosynthesis", "source_indexes": [1, 2]}]}
+            {"topics": [{"name": "Photosynthesis", "source_indexes": [first_passage]}]}
         ),
     )
 
@@ -411,7 +412,7 @@ def test_topic_source_material_ids_follow_cited_passages(
     )
     assert response.status_code == 201, response.text
     topic = response.json()[0]
-    assert topic["source_material_ids"] == sorted([first, second])
+    assert topic["source_material_ids"] == [first]
 
 
 def test_generation_is_rejected_while_one_is_already_running() -> None:

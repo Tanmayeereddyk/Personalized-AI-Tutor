@@ -291,9 +291,12 @@ export const useCreateQuiz = (courseId: string) => {
       difficulty: string;
       score?: number;
       total?: number;
+      answers?: { question_id: string; topic_id: string | null; answered: boolean; is_correct: boolean | null }[];
     }) => api.quizzes.create(courseId, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quizzes", user?.id, courseId] });
+      queryClient.invalidateQueries({ queryKey: ["topics", user?.id, courseId] });
+      queryClient.invalidateQueries({ queryKey: ["courses", user?.id] });
     },
   });
 };
@@ -386,11 +389,20 @@ export const useCreateDeck = (courseId: string) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { topic: string; card_count?: number }) =>
+    mutationFn: (input: { topic: string; name?: string; card_count?: number }) =>
       api.decks.create(courseId, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flashcard-decks", user?.id, courseId] });
     },
+  });
+};
+
+export const useGenerateFlashcardDeck = (courseId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { deck_name: string; topic_ids: string[]; cards_per_topic: number; difficulty: "Easy" | "Medium" | "Hard" }) => api.decks.generate(courseId, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["flashcard-decks", user?.id, courseId] }),
   });
 };
 

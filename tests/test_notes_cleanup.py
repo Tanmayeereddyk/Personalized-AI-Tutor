@@ -206,6 +206,26 @@ def test_empty_and_label_only_documents_are_handled() -> None:
     assert strip_source_location_labels("## Slide 1").strip() == ""
 
 
+def test_removes_legacy_trailing_sources_list_on_regeneration() -> None:
+    markdown = """# Course Notes
+
+## Key ideas
+
+Energy is conserved.
+
+## Sources
+- Chemistry deck
+- Physics workbook
+"""
+
+    cleaned = strip_source_location_labels(markdown)
+
+    assert "Energy is conserved." in cleaned
+    assert "## Sources" not in cleaned
+    assert "Chemistry deck" not in cleaned
+    assert "Physics workbook" not in cleaned
+
+
 # ----------------------------------------------------------------------
 # End to end: the saved note is cleaned
 # ----------------------------------------------------------------------
@@ -297,6 +317,7 @@ def test_generated_notes_drop_location_labels_but_keep_technical_content(
     assert "Slide 1" not in content
     assert "Slide 2" not in content
     assert "Page 3" not in content
+    assert "## Sources" not in content
 
     # The educational content survived intact.
     assert "### Ohm's Law" in content

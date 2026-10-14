@@ -51,6 +51,7 @@ export interface QuizSource {
 
 export interface QuizQuestion {
   id: string;
+  topicId?: string | null | undefined;
   type: QuizQuestionType;
   prompt: string;
   /** Present for multiple-choice and true/false; absent for short answer. */

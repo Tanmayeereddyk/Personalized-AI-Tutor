@@ -22,6 +22,7 @@ import type {
   MaterialPreview,
   Note,
   Quiz,
+  QuizAnswer,
   Topic,
   TutorAnswer,
   TutorTurn,
@@ -445,6 +446,7 @@ interface QuizDto {
   submitted_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+  answers?: { question_id: string; topic_id: string | null; answered: boolean; is_correct: boolean | null }[] | Record<string, string>;
 }
 
 interface QuizQuestionSourceDto {
@@ -533,6 +535,7 @@ interface DeckDto {
   id: string;
   user_id: string;
   course_id: string;
+  name?: string | null;
   topic: string;
   card_count: number;
   created_at: string | null;
@@ -545,6 +548,8 @@ interface FlashcardDto {
   deck_id: string;
   front: string;
   back: string;
+  topic_id?: string | null;
+  topic?: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -728,11 +733,17 @@ export const toQuiz = (dto: QuizDto): Quiz => ({
   score: dto.score,
   total: dto.total,
   date: friendlyDate(dto.created_at),
-  percentage: dto.total ? Math.round((dto.score / dto.total) * 100) : (dto.percentage ?? 0),
-  source: dto.source ?? "manual",
+  percentage: dto.percentage,
+  source: dto.source,
   quizSetId: dto.quiz_set_id,
   scopeLabel: dto.scope_label,
   submittedAt: dto.submitted_at,
+  answers: Array.isArray(dto.answers) ? dto.answers.map((answer): QuizAnswer => ({
+    questionId: answer.question_id,
+    topicId: answer.topic_id,
+    answered: answer.answered,
+    isCorrect: answer.is_correct,
+  })) : undefined,
 });
 
 const QUIZ_QUESTION_TYPE_VALUES: QuizQuestionType[] = [
@@ -832,6 +843,7 @@ export const toTopic = (dto: TopicDto): Topic => ({
 export const toDeck = (dto: DeckDto): FlashcardDeck => ({
   id: dto.id,
   courseId: dto.course_id,
+  name: dto.name,
   topic: dto.topic,
   cards: dto.card_count,
   lastReviewed: friendlyDate(dto.updated_at),
@@ -843,6 +855,8 @@ export const toFlashcard = (dto: FlashcardDto): Flashcard => ({
   userId: dto.user_id,
   front: dto.front,
   back: dto.back,
+  topicId: dto.topic_id,
+  topic: dto.topic,
   createdAt: dto.created_at ?? "",
   courseId: undefined,
 });
@@ -1292,7 +1306,7 @@ export const api = {
     },
     async create(
       courseId: string,
-      input: { topic: string; card_count?: number },
+      input: { topic: string; name?: string; card_count?: number },
     ): Promise<FlashcardDeck> {
       return toDeck(
         await request<DeckDto>(`/api/courses/${courseId}/flashcard-decks`, {
@@ -1301,13 +1315,16 @@ export const api = {
         }),
       );
     },
+    async generate(courseId: string, input: { deck_name: string; topic_ids: string[]; cards_per_topic: number; difficulty: "Easy" | "Medium" | "Hard" }) {
+      return request<{ deck: DeckDto; cards: FlashcardDto[]; topics: { topic_id: string; topic: string; requested: number; generated: number; message?: string | null }[]; message?: string | null }>(`/api/courses/${courseId}/flashcard-decks/generate`, { method: "POST", body: input });
+    },
   },
   flashcards: {
     async list(deckId: string): Promise<Flashcard[]> {
       const dto = await request<FlashcardDto[]>(`/api/decks/${deckId}/flashcards`);
       return dto.map(toFlashcard);
     },
-    async create(deckId: string, input: { front: string; back: string }): Promise<Flashcard> {
+    async create(deckId: string, input: { front: string; back: string; topic_id?: string | null; topic?: string | null }): Promise<Flashcard> {
       return toFlashcard(
         await request<FlashcardDto>(`/api/decks/${deckId}/flashcards`, {
           method: "POST",

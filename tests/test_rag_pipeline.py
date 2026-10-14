@@ -294,6 +294,7 @@ def test_generate_notes_is_grounded_cited_and_saved(client) -> None:
     assert "chlorophyll" in note["content"]
     assert note["source_material_ids"] == [material["id"]]
     assert note["source_refs"]
+    assert "## Sources" not in note["content"]
     assert {ref["page"] for ref in note["source_refs"]} >= {1, 2}
     assert note["topics"]
 

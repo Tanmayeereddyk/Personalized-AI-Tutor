@@ -43,12 +43,20 @@ class NoteResponse(BaseModel):
 # ------------------------------------------------------------------
 # QUIZZES
 # ------------------------------------------------------------------
+class QuizAnswer(BaseModel):
+    question_id: str = Field(min_length=1, max_length=100)
+    topic_id: str | None = None
+    answered: bool
+    is_correct: bool | None = None
+
+
 class QuizCreate(BaseModel):
     name: str = Field(min_length=1, max_length=300)
     topic: str | None = Field(default=None, max_length=200)
     difficulty: str = Field(default="Medium", max_length=20)
     score: int = Field(default=0, ge=0)
     total: int = Field(default=0, ge=0)
+    answers: list[QuizAnswer] = Field(default_factory=list)
 
 
 class QuizUpdate(BaseModel):
@@ -61,7 +69,7 @@ class QuizUpdate(BaseModel):
 
 class QuizResponse(BaseModel):
     """A quiz attempt. AI attempts carry the extra attempt metadata; manually
-    recorded ones simply leave it at the defaults."""
+    recorded ones may have answer details without the generated answer key."""
 
     id: str
     user_id: str
@@ -71,11 +79,12 @@ class QuizResponse(BaseModel):
     difficulty: str = "Medium"
     score: int = 0
     total: int = 0
-    # Legacy or externally written rows may not have a recorded score.
+    # AI submissions store question_id -> submitted answer; manually logged
+    # attempts may store validated per-question answer details.
+    answers: dict[str, str] | list[QuizAnswer] = Field(default_factory=dict)
     percentage: int | None = None
     quiz_set_id: str | None = None
     scope_label: str | None = None
-    # Null means the attempt's provenance was not recorded.
     source: str | None = None
     submitted_at: str | None = None
     created_at: str | None = None
@@ -86,6 +95,7 @@ class QuizResponse(BaseModel):
 # FLASHCARD DECKS
 # ------------------------------------------------------------------
 class DeckCreate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=300)
     topic: str = Field(default="General", max_length=200)
     card_count: int = Field(default=0, ge=0)
 
@@ -99,6 +109,7 @@ class DeckResponse(BaseModel):
     id: str
     user_id: str
     course_id: str
+    name: str | None = None
     topic: str = "General"
     card_count: int = 0
     created_at: str | None = None
@@ -176,6 +187,8 @@ class BookmarkResponse(BaseModel):
 class FlashcardCreate(BaseModel):
     front: str = Field(min_length=1, max_length=4000)
     back: str = Field(min_length=1, max_length=4000)
+    topic_id: str | None = None
+    topic: str | None = Field(default=None, max_length=200)
 
 
 class FlashcardUpdate(BaseModel):
@@ -189,4 +202,6 @@ class FlashcardResponse(BaseModel):
     deck_id: str
     front: str
     back: str
+    topic_id: str | None = None
+    topic: str | None = None
     created_at: str | None = None

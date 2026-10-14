@@ -165,7 +165,11 @@ export function Quizzes() {
                     <p className="truncate font-medium">{q.name}</p>
                     <p className="mt-0.5 truncate text-xs text-muted-foreground">
                       {q.date}
-                      {q.source === "ai" ? " · AI practice quiz" : " · Recorded attempt"}
+                      {q.source === "ai"
+                        ? " · AI practice quiz"
+                        : q.source === "manual"
+                          ? " · Recorded attempt"
+                          : " · Source unknown"}
                     </p>
                   </button>
 
@@ -235,10 +239,14 @@ export function Quizzes() {
                 <QuizResultView result={viewingResult.data} />
               </div>
             ) : null
-          ) : (
+          ) : viewing.source === "manual" ? (
             <p className="py-6 text-sm text-muted-foreground">
               This attempt was recorded manually, so only its score was saved. Generate an AI quiz
               to keep the full answers and explanations.
+            </p>
+          ) : (
+            <p className="py-6 text-sm text-muted-foreground">
+              The source for this attempt was not recorded, so only its saved score is available.
             </p>
           )
         ) : null}

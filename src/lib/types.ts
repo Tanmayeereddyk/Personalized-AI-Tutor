@@ -139,22 +139,32 @@ export interface Quiz {
   id: string; courseId: string; name: string; topic: string; difficulty: Difficulty;
   score: number; total: number; date: string;
   /** 0-100, stored on the backend for graded AI attempts. */
-  percentage?: number | undefined;
+  percentage?: number | null | undefined;
   /** "ai" for a graded generated quiz, "manual" for a hand-logged score. */
-  source?: string | undefined;
+  source?: string | null | undefined;
   /** Present for AI attempts: the generated quiz they came from. */
   quizSetId?: string | null | undefined;
   scopeLabel?: string | null | undefined;
   submittedAt?: string | null | undefined;
+  answers?: QuizAnswer[] | undefined;
 }
 
-export interface FlashcardDeck { id: string; courseId: string; topic: string; cards: number; lastReviewed: string }
+export interface QuizAnswer {
+  questionId: string;
+  topicId: string | null;
+  answered: boolean;
+  isCorrect: boolean | null;
+}
+
+export interface FlashcardDeck { id: string; courseId: string; name?: string | null | undefined; topic: string; cards: number; lastReviewed: string }
 export interface Flashcard {
   id: string;
   deckId: string;
   userId: string;
   front: string;
   back: string;
+  topicId?: string | null | undefined;
+  topic?: string | null | undefined;
   createdAt: string;
   courseId?: string | undefined;
 }

@@ -7,6 +7,7 @@ update or delete the first user's rows — even when a record id is known.
 """
 
 import pytest
+import uuid
 
 from app.main import app
 from tests.conftest import create_user
@@ -178,6 +179,27 @@ def test_course_scoped_crud(client, logged_in_user, segment, body) -> None:
     assert client.get(f"/api/{segment}/{item['id']}", headers=headers).status_code == 404
 
 
+def test_quiz_attempt_persists_answer_details_and_rejects_duplicates(client, logged_in_user) -> None:
+    _, headers = logged_in_user
+    course_id = _course(client, headers)
+    payload = {
+        "name": "Topic practice",
+        "score": 1,
+        "total": 2,
+        "answers": [
+            {"question_id": "q1", "topic_id": None, "answered": True, "is_correct": True},
+            {"question_id": "q2", "topic_id": None, "answered": False, "is_correct": None},
+        ],
+    }
+    created = client.post(f"/api/courses/{course_id}/quizzes", json=payload, headers=headers)
+    assert created.status_code == 201, created.text
+    assert created.json()["answers"] == payload["answers"]
+
+    duplicate = {**payload, "answers": [payload["answers"][0], payload["answers"][0]]}
+    response = client.post(f"/api/courses/{course_id}/quizzes", json=duplicate, headers=headers)
+    assert response.status_code == 422
+
+
 def test_quiz_list_preserves_null_percentage_and_source(
     client, fake_supabase, logged_in_user
 ) -> None:
@@ -188,7 +210,6 @@ def test_quiz_list_preserves_null_percentage_and_source(
         json={"name": "Legacy quiz"},
         headers=headers,
     ).json()
-    # Simulate an existing row returned by Supabase with nullable legacy data.
     stored = next(row for row in fake_supabase.tables["quizzes"] if row["id"] == quiz["id"])
     stored["percentage"] = None
     stored["source"] = None
@@ -199,6 +220,24 @@ def test_quiz_list_preserves_null_percentage_and_source(
     listed = next(row for row in response.json() if row["id"] == quiz["id"])
     assert listed["percentage"] is None
     assert listed["source"] is None
+
+
+def test_quiz_attempt_rejects_topic_from_another_course(client, fake_supabase, logged_in_user) -> None:
+    user, headers = logged_in_user
+    course_id = _course(client, headers)
+    other_course = _course(client, headers, name="Chemistry")
+    topic_id = str(uuid.uuid4())
+    fake_supabase.tables.setdefault("topics", []).append({
+        "id": topic_id, "user_id": user.id, "course_id": other_course, "name": "Atomic structure"
+    })
+    response = client.post(
+        f"/api/courses/{course_id}/quizzes",
+        json={"name": "Invalid association", "answers": [
+            {"question_id": "q1", "topic_id": topic_id, "answered": True, "is_correct": True}
+        ]},
+        headers=headers,
+    )
+    assert response.status_code == 422
 
 
 @pytest.mark.parametrize(("segment", "body"), COURSE_SCOPED)
