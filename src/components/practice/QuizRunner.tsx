@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { Modal, ProgressBar, Ring } from "@/components/ui/kit";
+import { MathText } from "@/components/math/MathText";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 import { useCountdown } from "@/lib/use-countdown";
@@ -281,7 +282,7 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
                   </div>
 
                   <h2 className="mt-4 text-lg font-medium leading-snug sm:text-xl">
-                    {question.prompt}
+                    <MathText text={question.prompt} />
                   </h2>
 
                   <div className="mt-5">
@@ -432,7 +433,9 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium">{q.prompt}</p>
+                      <p className="font-medium">
+                        <MathText text={q.prompt} />
+                      </p>
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
                         <span className="chip">{labelForQuestionType(q.type)}</span>
                       </div>
@@ -449,7 +452,7 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
                             )}
                           >
                             {given.trim() ? (
-                              given
+                              <MathText text={given} />
                             ) : (
                               <span className="italic text-muted-foreground">
                                 Not answered
@@ -462,13 +465,15 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
                             <dt className="w-28 shrink-0 text-muted-foreground">
                               Correct answer
                             </dt>
-                            <dd className="min-w-0 break-words">{q.correctAnswer}</dd>
+                            <dd className="min-w-0 break-words">
+                              <MathText text={q.correctAnswer} />
+                            </dd>
                           </div>
                         ) : null}
                       </dl>
 
                       <p className="mt-3 rounded-lg bg-secondary/50 px-3 py-2 text-sm text-muted-foreground">
-                        {q.explanation}
+                        <MathText text={q.explanation} />
                       </p>
 
                       {q.source ? (
@@ -615,7 +620,9 @@ function AnswerControl({
             )}
           >
             <RadioGroupItem id={id} value={option} className="mt-0.5" />
-            <span>{option}</span>
+            <span>
+              <MathText text={option} />
+            </span>
           </label>
         );
       })}

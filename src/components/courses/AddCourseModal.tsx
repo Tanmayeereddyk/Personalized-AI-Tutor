@@ -12,7 +12,8 @@ const icons = Object.keys(courseIcons) as CourseIcon[];
 
 interface CourseFormValues {
   name: string;
-  code: string;
+  /** Only the edit form collects a course code; creation never sends one. */
+  code?: string | undefined;
   description?: string | undefined;
   color: CourseColor;
   icon: CourseIcon;
@@ -115,9 +116,10 @@ export function AddCourseModal() {
     setSaving(true);
     setError(null);
     try {
+      // No course code is sent on purpose: the backend treats it as
+      // optional and derives one from the course name when absent.
       const c = await createCourse({
         name: values.name,
-        code: values.code,
         description: values.description,
         color: values.color,
         icon: values.icon,

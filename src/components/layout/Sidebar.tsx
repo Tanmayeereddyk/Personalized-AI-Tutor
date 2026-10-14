@@ -1,10 +1,11 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Check, ChevronsUpDown, CalendarDays, LayoutGrid, Library, LogOut, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles, Sun, User } from "lucide-react";
+import { Check, ChevronsUpDown, CalendarDays, LayoutGrid, Library, LogOut, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sun, User } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useTheme, type ThemePreference } from "@/lib/theme";
 import { CourseBadge } from "@/components/ui/kit";
+import { Logo } from "@/components/layout/Logo";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -50,10 +51,7 @@ export function Sidebar({
   return (
     <div className="flex h-full flex-col bg-sidebar">
       <div className={cn("flex items-center gap-2.5 px-4 py-5", compact && "flex-col gap-2 px-0")}>
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-[0_0_24px_-4px] shadow-primary/60">
-          <Sparkles className="h-4 w-4" />
-        </span>
-        {!compact && <span className="text-[15px] font-semibold tracking-tight">Lumio</span>}
+        <Logo className={compact ? "h-8" : "h-9"} />
         {onToggleCollapsed && (
           <button
             type="button"

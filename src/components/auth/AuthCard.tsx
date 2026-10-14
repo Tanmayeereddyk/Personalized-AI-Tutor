@@ -1,15 +1,12 @@
-import { Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
+import { Logo } from "@/components/layout/Logo";
 
 export function AuthCard({ title, subtitle, children, footer }: { title: string; subtitle: string; children: ReactNode; footer: ReactNode }) {
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm">
-        <div className="mb-6 flex items-center justify-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Sparkles className="h-4 w-4" />
-          </span>
-          <span className="text-[15px] font-semibold tracking-tight">Lumio</span>
+        <div className="mb-6 flex items-center justify-center">
+          <Logo className="h-10" />
         </div>
         <div className="card bg-card p-6 sm:p-8">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
