@@ -291,9 +291,12 @@ export const useCreateQuiz = (courseId: string) => {
       difficulty: string;
       score?: number;
       total?: number;
+      answers?: { question_id: string; topic_id: string | null; answered: boolean; is_correct: boolean | null }[];
     }) => api.quizzes.create(courseId, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quizzes", user?.id, courseId] });
+      queryClient.invalidateQueries({ queryKey: ["topics", user?.id, courseId] });
+      queryClient.invalidateQueries({ queryKey: ["courses", user?.id] });
     },
   });
 };

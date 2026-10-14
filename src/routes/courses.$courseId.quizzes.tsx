@@ -288,7 +288,19 @@ export function Quizzes() {
       />
 
       {session ? (
-        <QuizRunner key={session.id} quiz={session} onExit={() => setSession(null)} />
+        <QuizRunner
+          key={session.id}
+          quiz={session}
+          onExit={() => setSession(null)}
+          onComplete={async (attempt) => {
+            try {
+              await create.mutateAsync(attempt);
+              toast.success("Quiz attempt saved.");
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Could not save quiz results.");
+            }
+          }}
+        />
       ) : null}
     </div>
   );

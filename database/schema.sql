@@ -181,6 +181,7 @@ create table if not exists public.quizzes (
     difficulty text not null default 'Medium',
     score      integer not null default 0,
     total      integer not null default 0,
+    answers    jsonb not null default '[]'::jsonb,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );

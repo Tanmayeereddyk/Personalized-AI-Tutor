@@ -22,6 +22,7 @@ import type {
   MaterialPreview,
   Note,
   Quiz,
+  QuizAnswer,
   Topic,
   TutorAnswer,
   TutorTurn,
@@ -431,6 +432,7 @@ interface QuizDto {
   difficulty: string;
   score: number;
   total: number;
+  answers?: { question_id: string; topic_id: string | null; answered: boolean; is_correct: boolean | null }[];
   created_at: string | null;
   updated_at: string | null;
 }
@@ -444,6 +446,7 @@ interface QuizQuestionSourceDto {
 
 interface QuizQuestionDto {
   id: string;
+  topic_id?: string | null;
   type: string;
   prompt: string;
   options: string[] | null;
@@ -682,6 +685,12 @@ export const toQuiz = (dto: QuizDto): Quiz => ({
   score: dto.score,
   total: dto.total,
   date: friendlyDate(dto.created_at),
+  answers: (dto.answers ?? []).map((answer): QuizAnswer => ({
+    questionId: answer.question_id,
+    topicId: answer.topic_id,
+    answered: answer.answered,
+    isCorrect: answer.is_correct,
+  })),
 });
 
 const QUIZ_QUESTION_TYPE_VALUES: QuizQuestionType[] = [
@@ -697,6 +706,7 @@ const toQuizQuestionType = (value: string): QuizQuestionType =>
 
 const toQuizQuestion = (dto: QuizQuestionDto): QuizQuestion => ({
   id: dto.id,
+  topicId: dto.topic_id,
   type: toQuizQuestionType(dto.type),
   prompt: dto.prompt,
   options: dto.options ?? undefined,
@@ -1120,6 +1130,7 @@ export const api = {
         difficulty: string;
         score?: number;
         total?: number;
+        answers?: { question_id: string; topic_id: string | null; answered: boolean; is_correct: boolean | null }[];
       },
     ): Promise<Quiz> {
       return toQuiz(

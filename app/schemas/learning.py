@@ -43,12 +43,20 @@ class NoteResponse(BaseModel):
 # ------------------------------------------------------------------
 # QUIZZES
 # ------------------------------------------------------------------
+class QuizAnswer(BaseModel):
+    question_id: str = Field(min_length=1, max_length=100)
+    topic_id: str | None = None
+    answered: bool
+    is_correct: bool | None = None
+
+
 class QuizCreate(BaseModel):
     name: str = Field(min_length=1, max_length=300)
     topic: str | None = Field(default=None, max_length=200)
     difficulty: str = Field(default="Medium", max_length=20)
     score: int = Field(default=0, ge=0)
     total: int = Field(default=0, ge=0)
+    answers: list[QuizAnswer] = Field(default_factory=list)
 
 
 class QuizUpdate(BaseModel):
@@ -68,6 +76,7 @@ class QuizResponse(BaseModel):
     difficulty: str = "Medium"
     score: int = 0
     total: int = 0
+    answers: list[QuizAnswer] = Field(default_factory=list)
     created_at: str | None = None
     updated_at: str | None = None
 

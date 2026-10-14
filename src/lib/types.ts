@@ -138,6 +138,14 @@ export type Difficulty = "Easy" | "Medium" | "Hard" | "Mixed";
 export interface Quiz {
   id: string; courseId: string; name: string; topic: string; difficulty: Difficulty;
   score: number; total: number; date: string;
+  answers?: QuizAnswer[] | undefined;
+}
+
+export interface QuizAnswer {
+  questionId: string;
+  topicId: string | null;
+  answered: boolean;
+  isCorrect: boolean | null;
 }
 
 export interface FlashcardDeck { id: string; courseId: string; topic: string; cards: number; lastReviewed: string }

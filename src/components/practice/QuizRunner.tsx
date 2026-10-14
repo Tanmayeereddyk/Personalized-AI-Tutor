@@ -33,6 +33,14 @@ type SubmitReason = "manual" | "timeout";
 
 interface QuizRunnerProps {
   quiz: GeneratedQuiz;
+  onComplete: (attempt: {
+    name: string;
+    topic: string;
+    difficulty: string;
+    score: number;
+    total: number;
+    answers: { question_id: string; topic_id: string | null; answered: boolean; is_correct: boolean | null }[];
+  }) => Promise<unknown>;
   /** Leave the quiz entirely (back to the quiz list). */
   onExit: () => void;
 }
@@ -46,7 +54,7 @@ const CRITICAL_AFTER_MS = 10_000;
  * navigator, an optional countdown and a results review. All answers live in
  * local state — nothing is sent to the backend.
  */
-export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
+export function QuizRunner({ quiz, onExit, onComplete }: QuizRunnerProps) {
   const total = quiz.questions.length;
 
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -65,6 +73,7 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
   );
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const savedAttempt = useRef(false);
   const resetScroll = useCallback(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = 0;
@@ -115,6 +124,28 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
   const score = results.filter((r) => r.correct).length;
   const pct = total > 0 ? Math.round((score / total) * 100) : 0;
 
+  useEffect(() => {
+    if (phase !== "results" || savedAttempt.current) return;
+    savedAttempt.current = true;
+    const answerDetails = results.map(({ question, given, correct }) => {
+      const answered = given.trim() !== "";
+      return {
+        question_id: question.id,
+        topic_id: question.topicId ?? null,
+        answered,
+        is_correct: answered ? correct : null,
+      };
+    });
+    void onComplete({
+      name: quiz.title,
+      topic: quiz.scopeLabel,
+      difficulty: quiz.difficulty,
+      score,
+      total,
+      answers: answerDetails,
+    });
+  }, [phase, results, onComplete, quiz.title, quiz.scopeLabel, quiz.difficulty, score, total]);
+
   const setAnswer = useCallback((id: string, value: string) => {
     setAnswers((prev) => ({ ...prev, [id]: value }));
   }, []);
@@ -128,6 +159,7 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
   );
 
   const restart = useCallback(() => {
+    savedAttempt.current = false;
     setAnswers({});
     setIndex(0);
     setReason(null);

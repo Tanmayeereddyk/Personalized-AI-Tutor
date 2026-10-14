@@ -11,7 +11,7 @@ the course belongs to the caller. Personal resources (calendar events,
 bookmarks) live at ``/api/<segment>``.
 """
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from supabase import Client
 
 from app.api.dependencies import get_current_user, get_service_supabase
@@ -61,6 +61,35 @@ def _course_scoped_router(
     ):
         owned_service.ensure_course_owned(db, user.id, course_id)
         values = payload.model_dump()
+        if table == "quizzes":
+            answers = values.get("answers", [])
+            question_ids = [answer["question_id"] for answer in answers]
+            if len(question_ids) != len(set(question_ids)):
+                raise HTTPException(status_code=422, detail="Duplicate question answers are not allowed")
+            if any(
+                (answer["answered"] and not isinstance(answer.get("is_correct"), bool))
+                or (not answer["answered"] and answer.get("is_correct") is not None)
+                for answer in answers
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Answered questions require correctness; unanswered questions must not include it",
+                )
+            topic_ids = {answer["topic_id"] for answer in answers if answer.get("topic_id")}
+            if topic_ids:
+                for topic_id in topic_ids:
+                    topic_row = (
+                        db.table("topics")
+                        .select("id")
+                        .eq("id", topic_id)
+                        .eq("user_id", user.id)
+                        .eq("course_id", course_id)
+                        .maybe_single()
+                        .execute()
+                        .data
+                    )
+                    if topic_row is None:
+                        raise HTTPException(status_code=422, detail="Answer topics must belong to this course")
         values["course_id"] = course_id
         return owned_service.create_item(db, user.id, table, values)
 
