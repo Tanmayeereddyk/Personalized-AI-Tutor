@@ -16,7 +16,6 @@ import { ApiError } from "@/lib/api";
 import {
   useGenerateTopics,
   useMaterials,
-  useRefreshTopics,
   useTopics,
 } from "@/lib/queries";
 import type { Topic } from "@/lib/types";
@@ -47,7 +46,6 @@ export function Topics() {
   const topics = useTopics(courseId);
   const materials = useMaterials(courseId);
   const generate = useGenerateTopics(courseId);
-  const refresh = useRefreshTopics(courseId);
   const navigate = useNavigate();
 
   const list = topics.data ?? [];
@@ -72,7 +70,7 @@ export function Topics() {
     });
   };
 
-  const busy = generate.isPending || refresh.isPending;
+  const busy = generate.isPending;
 
   const generateTopics = async () => {
     try {
@@ -85,21 +83,10 @@ export function Topics() {
     }
   };
 
-  const refreshTopics = async () => {
-    try {
-      await refresh.mutateAsync();
-      toast.success("Topics refreshed from your materials.");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Couldn't refresh topics.",
-      );
-    }
-  };
-
-  // A failed generate/refresh is shown inline as well as as a toast, so
+  // A failed generation is shown inline as well as as a toast, so
   // the actionable backend messages (add materials, index first, LLM
   // not configured) stay visible next to the button that failed.
-  const actionError = (generate.error ?? refresh.error) as Error | null;
+  const actionError = (generate.error) as Error | null;
 
   return (
     <div>
@@ -108,20 +95,7 @@ export function Topics() {
         subtitle="Your course knowledge map, generated from your own materials."
         action={
           <div className="flex flex-wrap items-center gap-2">
-            {list.length > 0 ? (
-              <button
-                className="btn btn-primary"
-                onClick={() => void refreshTopics()}
-                disabled={busy}
-              >
-                {refresh.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                {refresh.isPending ? "Refreshing…" : "Refresh Topics"}
-              </button>
-            ) : materials.data && materials.data.length > 0 ? (
+            {(list.length > 0 || (materials.data && materials.data.length > 0)) ? (
               <button
                 className="btn btn-primary"
                 onClick={() => void generateTopics()}
@@ -132,7 +106,7 @@ export function Topics() {
                 ) : (
                   <Sparkles className="h-4 w-4" />
                 )}
-                {generate.isPending ? "Generating…" : "Generate Topics"}
+                {generate.isPending ? "Generating topics…" : "Generate Topics"}
               </button>
             ) : null}
           </div>
@@ -144,17 +118,33 @@ export function Topics() {
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div className="text-sm">
             <p className="text-destructive">{actionError.message}</p>
-            {/* 400 means the course has no materials or nothing is indexed yet. */}
-            {actionError instanceof ApiError && actionError.status === 400 ? (
-              <Link
-                to="/courses/$courseId/materials"
-                params={{ courseId }}
-                className="mt-1 inline-flex items-center gap-1 font-medium text-primary hover:underline"
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              {/* Retry re-runs the same request: no materials or form to redo. */}
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 font-medium text-destructive underline-offset-2 hover:underline disabled:opacity-60"
+                onClick={() => void generateTopics()}
+                disabled={busy}
               >
-                <FolderOpen className="h-3.5 w-3.5" />
-                Manage materials
-              </Link>
-            ) : null}
+                {busy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {busy ? "Retrying…" : "Retry"}
+              </button>
+              {/* 400 means the course has no materials or nothing is indexed yet. */}
+              {actionError instanceof ApiError && actionError.status === 400 ? (
+                <Link
+                  to="/courses/$courseId/materials"
+                  params={{ courseId }}
+                  className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                  Manage materials
+                </Link>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
@@ -212,15 +202,21 @@ export function Topics() {
                 ) : (
                   <Sparkles className="h-4 w-4" />
                 )}
-                {generate.isPending ? "Generating…" : "Generate Topics"}
+                {generate.isPending ? "Generating topics…" : "Generate Topics"}
               </button>
             }
           />
         )
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
+        // A compact, vertical list: one topic under the next, in a narrow
+        // column, with small rows instead of a grid of large cards.
+        <ul
+          role="list"
+          aria-label="Course topics"
+          className="max-w-2xl divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface"
+        >
           {list.map((topic) => (
-            <TopicCard
+            <TopicRow
               key={topic.id}
               topic={topic}
               selected={selected?.id === topic.id}
@@ -228,13 +224,13 @@ export function Topics() {
               onSelect={() => selectTopic(topic)}
             />
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );
 }
 
-function TopicCard({
+function TopicRow({
   topic,
   selected,
   materialNames,
@@ -250,28 +246,27 @@ function TopicCard({
     .filter((name): name is string => Boolean(name));
 
   return (
-    <div className={cn("card p-5", selected && "border-primary/40")}>
-      <button
-        type="button"
-        onClick={onSelect}
-        aria-expanded={selected}
-        className="flex w-full items-start justify-between gap-3 text-left"
-      >
-        <div className="min-w-0">
-          <h3 className="truncate font-medium">{topic.name}</h3>
-          {topic.description && (
-            <p className="mt-1 text-sm text-muted-foreground">{topic.description}</p>
-          )}
-        </div>
-        <ChevronDown
-          className={cn(
-            "mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform",
-            selected && "rotate-180",
-          )}
-        />
-      </button>
+    <li className={cn(selected && "bg-accent/30")}>
+      <div className="px-3 pt-2 transition-colors hover:bg-accent/20">
+        <button
+          type="button"
+          onClick={onSelect}
+          aria-expanded={selected}
+          className="flex w-full items-start justify-between gap-2 text-left"
+        >
+          <span className="min-w-0 flex-1 break-words text-sm font-medium leading-snug">
+            {topic.name}
+          </span>
+          <ChevronDown
+            className={cn(
+              "mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+              selected && "rotate-180",
+            )}
+          />
+        </button>
+      </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 pt-1">
         {topic.generated && (
           <span className="chip text-primary">
             <Sparkles className="h-3 w-3" />
@@ -289,7 +284,7 @@ function TopicCard({
       </div>
 
       {selected && (
-        <div className="fade-up mt-4 space-y-4 border-t border-border pt-4">
+        <div className="fade-up space-y-3 border-t border-border px-3 py-3">
           <div>
             <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Source materials
@@ -336,6 +331,6 @@ function TopicCard({
           </div>
         </div>
       )}
-    </div>
+    </li>
   );
 }

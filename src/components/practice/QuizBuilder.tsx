@@ -2,23 +2,18 @@ import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
-  CheckCircle2,
   Clock,
-  File,
-  FileText,
+  ListChecks,
   Loader2,
-  Presentation,
   RefreshCw,
-  Search,
   Sparkles,
-  Video,
 } from "lucide-react";
 
 import { EmptyState, Modal } from "@/components/ui/kit";
-import { CheckGrid, Field, PillGroup } from "@/components/practice/Builder";
+import { CheckGrid, Field, PillGroup, toggle } from "@/components/practice/Builder";
 import { Switch } from "@/components/ui/switch";
-import { useMaterials } from "@/lib/queries";
-import type { Material, MaterialType } from "@/lib/types";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useGenerateQuiz, useTopics } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_QUIZ_CONFIG,
@@ -26,40 +21,16 @@ import {
   QUIZ_QUESTION_COUNT_OPTIONS,
   QUIZ_QUESTION_TYPES,
   QUIZ_TIMER_OPTIONS,
+  type GeneratedQuiz,
   type QuizConfig,
   type QuizQuestionType,
-} from "@/lib/quiz-mock";
-
-const MATERIAL_ICONS: Record<MaterialType, typeof FileText> = {
-  pdf: FileText,
-  ppt: Presentation,
-  video: Video,
-  doc: File,
-};
-
-const MATERIAL_TYPE_LABELS: Record<MaterialType, string> = {
-  pdf: "PDF",
-  ppt: "Slides",
-  video: "Video",
-  doc: "Document",
-};
-
-const TYPE_FILTERS = ["all", "pdf", "ppt", "video", "doc"] as const;
-type MaterialFilter = (typeof TYPE_FILTERS)[number];
-
-const FILTER_LABELS: Record<MaterialFilter, string> = {
-  all: "All",
-  pdf: "PDF",
-  ppt: "Slides",
-  video: "Video",
-  doc: "Document",
-};
+} from "@/lib/quiz";
 
 const COUNT_OPTIONS: number[] = [...QUIZ_QUESTION_COUNT_OPTIONS];
 const TIMER_OPTIONS: number[] = [...QUIZ_TIMER_OPTIONS];
 
 export interface QuizStartInput {
-  material: Material;
+  topicIds: string[];
   config: QuizConfig;
 }
 
@@ -67,21 +38,25 @@ interface QuizBuilderProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   courseId: string;
-  onStart: (input: QuizStartInput) => void;
+  /** Called with the LLM-generated quiz once the backend returns it. */
+  onGenerated: (quiz: GeneratedQuiz) => void;
 }
 
 /**
- * Two-step quiz setup: pick a saved material, then choose the quiz settings.
- * Settings are stored in local state only — nothing is generated server-side.
+ * Two-step quiz setup: pick the course topics, then choose the quiz settings.
+ *
+ * Topics are the only selectable unit — the backend resolves each topic's
+ * source materials internally. Clicking Generate calls the AI generation
+ * endpoint; the quiz is never built from a local question bank, and a failed
+ * request shows an error the student can retry.
  */
-export function QuizBuilder({ open, onOpenChange, courseId, onStart }: QuizBuilderProps) {
-  const materials = useMaterials(courseId);
-  const list = materials.data ?? [];
+export function QuizBuilder({ open, onOpenChange, courseId, onGenerated }: QuizBuilderProps) {
+  const topics = useTopics(courseId);
+  const list = useMemo(() => topics.data ?? [], [topics.data]);
+  const generateQuiz = useGenerateQuiz(courseId);
 
-  const [step, setStep] = useState<"material" | "config">("material");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<MaterialFilter>("all");
+  const [step, setStep] = useState<"topics" | "config">("topics");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const [questionCount, setQuestionCount] = useState(DEFAULT_QUIZ_CONFIG.questionCount);
   const [difficulty, setDifficulty] = useState(DEFAULT_QUIZ_CONFIG.difficulty);
@@ -89,210 +64,183 @@ export function QuizBuilder({ open, onOpenChange, courseId, onStart }: QuizBuild
   const [timerEnabled, setTimerEnabled] = useState(false);
   const [timerMinutes, setTimerMinutes] = useState<number>(10);
 
-  const selected = useMemo(
-    () => list.find((m) => m.id === selectedId) ?? null,
-    [list, selectedId],
+  const selectedTopics = useMemo(
+    () => list.filter((topic) => selectedIds.includes(topic.id)),
+    [list, selectedIds],
   );
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return list.filter(
-      (m) => (filter === "all" || m.type === filter) && (!q || m.name.toLowerCase().includes(q)),
-    );
-  }, [list, search, filter]);
-
-  const reset = () => {
-    setStep("material");
-    setSelectedId(null);
-    setSearch("");
-    setFilter("all");
+  const resetForm = () => {
+    setStep("topics");
+    setSelectedIds([]);
     setQuestionCount(DEFAULT_QUIZ_CONFIG.questionCount);
     setDifficulty(DEFAULT_QUIZ_CONFIG.difficulty);
     setTypes(DEFAULT_QUIZ_CONFIG.questionTypes);
     setTimerEnabled(false);
     setTimerMinutes(10);
+    generateQuiz.reset();
   };
 
   const handleOpenChange = (next: boolean) => {
-    if (!next) reset();
+    if (!next) resetForm();
     onOpenChange(next);
   };
 
+  const toggleTopic = (topicId: string) => {
+    setSelectedIds((prev) => toggle(prev, topicId));
+  };
+
   const toggleType = (next: string[]) => {
-    setTypes(
-      QUIZ_QUESTION_TYPES.filter((t) => next.includes(t.label)).map((t) => t.value),
+    setTypes(QUIZ_QUESTION_TYPES.filter((t) => next.includes(t.label)).map((t) => t.value));
+  };
+
+  const config = (): QuizConfig => ({
+    questionCount,
+    difficulty,
+    questionTypes: types,
+    timerMinutes: timerEnabled ? timerMinutes : null,
+  });
+
+  const canGenerate = selectedIds.length > 0 && types.length > 0;
+
+  const generate = () => {
+    if (!canGenerate || generateQuiz.isPending) return;
+    generateQuiz.mutate(
+      { topicIds: selectedIds, config: config() },
+      {
+        onSuccess: (quiz) => {
+          onGenerated(quiz);
+          handleOpenChange(false);
+        },
+      },
     );
   };
 
-  const generate = () => {
-    if (!selected) return;
-    onStart({
-      material: selected,
-      config: {
-        questionCount,
-        difficulty,
-        questionTypes: types,
-        timerMinutes: timerEnabled ? timerMinutes : null,
-      },
-    });
-  };
+  const errorMessage =
+    generateQuiz.error instanceof Error
+      ? generateQuiz.error.message
+      : generateQuiz.isError
+        ? "Could not generate the quiz. Please try again."
+        : null;
 
-  const readyMaterials = materials.isLoading || materials.isError ? false : list.length > 0;
-  const canGenerate = !!selected && types.length > 0;
+  const readyTopics = topics.isLoading || topics.isError ? false : list.length > 0;
 
   return (
     <Modal
       open={open}
       onOpenChange={handleOpenChange}
       size="xl"
-      title={step === "material" ? "Choose a material" : "Configure your quiz"}
+      title={step === "topics" ? "Choose topics" : "Configure your quiz"}
       description={
-        step === "material"
-          ? "Pick the saved material the quiz should cover."
-          : selected
-            ? `Questions for “${selected.name}”.`
+        step === "topics"
+          ? "Select the topics your quiz should cover."
+          : selectedTopics.length
+            ? `Questions from ${selectedTopics.map((topic) => topic.name).join(", ")}.`
             : "Choose how you want the quiz to look."
       }
     >
-      {step === "material" ? (
+      {step === "topics" ? (
         <div>
-          {/* Search + type filters */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="search"
-                className="field pl-9"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search materials…"
-                aria-label="Search materials by name"
-              />
-            </div>
-          </div>
-          <div className="mt-3">
-            <PillGroup<MaterialFilter>
-              options={TYPE_FILTERS}
-              value={filter}
-              onChange={setFilter}
-              format={(v) => FILTER_LABELS[v]}
-            />
-          </div>
-
-          {/* States */}
-          <div className="mt-5">
-            {materials.isLoading ? (
+          <div className="mt-1">
+            {topics.isLoading ? (
               <div className="card flex items-center justify-center gap-2 border-dashed px-6 py-14 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading your materials…
+                Loading your topics…
               </div>
-            ) : materials.isError ? (
+            ) : topics.isError ? (
               <div className="card px-6 py-12 text-center">
                 <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
                   <AlertTriangle className="h-5 w-5" />
                 </div>
-                <p className="font-medium">Couldn’t load your materials</p>
+                <p className="font-medium">Couldn’t load your topics</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {(materials.error as Error)?.message ?? "Please try again."}
+                  {(topics.error as Error)?.message ?? "Please try again."}
                 </p>
-                <button className="btn btn-ghost mt-5" onClick={() => void materials.refetch()}>
+                <button className="btn btn-ghost mt-5" onClick={() => void topics.refetch()}>
                   <RefreshCw className="h-4 w-4" />
                   Try again
                 </button>
               </div>
-            ) : !readyMaterials ? (
+            ) : !readyTopics ? (
               <EmptyState
-                icon={FileText}
-                title="No saved materials yet"
-                body="Upload a PDF, slide deck or lecture video in Materials, then come back to build a quiz from it."
+                icon={ListChecks}
+                title="No topics yet"
+                body="Generate the knowledge map for this course from your materials, then come back to build a quiz."
               />
-            ) : filtered.length === 0 ? (
-              <div className="card flex flex-col items-center border-dashed px-6 py-12 text-center">
-                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-secondary text-muted-foreground">
-                  <Search className="h-5 w-5" />
-                </div>
-                <p className="font-medium">No materials match</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Try a different search term or file type.
-                </p>
-                <button
-                  className="btn btn-ghost mt-5"
-                  onClick={() => {
-                    setSearch("");
-                    setFilter("all");
-                  }}
-                >
-                  Clear filters
-                </button>
-              </div>
             ) : (
-              <ul className="grid gap-3 sm:grid-cols-2" role="list">
-                {filtered.map((m) => {
-                  const Icon = MATERIAL_ICONS[m.type] ?? File;
-                  const isSelected = m.id === selectedId;
-                  return (
-                    <li key={m.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedId(m.id)}
-                        aria-pressed={isSelected}
-                        className={cn(
-                          "group relative flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition outline-none",
-                          "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                          isSelected
-                            ? "border-primary bg-primary/10 shadow-[0_0_0_1px_var(--color-primary)]"
-                            : "bg-background hover:border-foreground/20 hover:bg-accent/40",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
-                            isSelected ? "border-primary/40 bg-primary/15 text-primary" : "bg-surface-2 text-muted-foreground",
-                          )}
-                        >
-                          <Icon className="h-5 w-5" />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-medium">{m.name}</span>
-                          <span className="mt-1.5 flex flex-wrap gap-1.5">
-                            <span className="chip">{MATERIAL_TYPE_LABELS[m.type] ?? m.kind}</span>
-                            {m.added ? <span className="chip">{m.added}</span> : null}
-                            {m.status !== "ready" ? (
-                              <span className="chip text-warning">
-                                {m.status === "processing" ? "Processing…" : "Needs attention"}
+              <>
+                {/* A narrow, vertical checklist: one topic under the next. */}
+                <div className="mx-auto max-w-xl">
+                  <ul
+                    role="list"
+                    aria-label="Course topics"
+                    className="max-h-72 divide-y overflow-y-auto rounded-xl border bg-background"
+                  >
+                    {list.map((topic) => {
+                      const checked = selectedIds.includes(topic.id);
+                      return (
+                        <li key={topic.id}>
+                          <label
+                            htmlFor={`quiz-topic-${topic.id}`}
+                            className={cn(
+                              "flex cursor-pointer items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-accent/40",
+                              checked && "bg-accent/30",
+                            )}
+                          >
+                            <Checkbox
+                              id={`quiz-topic-${topic.id}`}
+                              checked={checked}
+                              onCheckedChange={() => toggleTopic(topic.id)}
+                              className="mt-0.5"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block break-words text-sm leading-snug font-medium">
+                                {topic.name}
                               </span>
-                            ) : null}
-                          </span>
-                        </span>
-                        <span
-                          className={cn(
-                            "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition",
-                            isSelected
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-foreground/25 text-transparent",
-                          )}
-                          aria-hidden="true"
+                              {topic.description ? (
+                                <span className="mt-0.5 block text-xs text-muted-foreground">
+                                  {topic.description}
+                                </span>
+                              ) : null}
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>
+                      {selectedIds.length} of {list.length} selected
+                    </span>
+                    {list.length > 1 ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="hover:text-foreground"
+                          onClick={() => setSelectedIds(list.map((topic) => topic.id))}
                         >
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                          Select all
+                        </button>
+                        <span aria-hidden="true">·</span>
+                        <button
+                          type="button"
+                          className="hover:text-foreground"
+                          onClick={() => setSelectedIds([])}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </>
             )}
           </div>
 
-          {/* Footer */}
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
             <p className="min-w-0 text-sm text-muted-foreground">
-              {selected ? (
-                <>
-                  Selected: <span className="text-foreground">{selected.name}</span>
-                </>
-              ) : (
-                "Select a material to continue."
-              )}
+              {selectedTopics.length > 0
+                ? `${selectedTopics.length} topic${selectedTopics.length === 1 ? "" : "s"} selected`
+                : "Select at least one topic to continue."}
             </p>
             <div className="flex items-center gap-2">
               <button className="btn btn-ghost" onClick={() => handleOpenChange(false)}>
@@ -301,7 +249,7 @@ export function QuizBuilder({ open, onOpenChange, courseId, onStart }: QuizBuild
               <button
                 className="btn btn-primary"
                 onClick={() => setStep("config")}
-                disabled={!selected}
+                disabled={selectedIds.length === 0}
               >
                 Continue
               </button>
@@ -310,29 +258,32 @@ export function QuizBuilder({ open, onOpenChange, courseId, onStart }: QuizBuild
         </div>
       ) : (
         <div className="space-y-5">
-          {selected ? (
-            <div className="flex items-center gap-3 rounded-2xl border bg-background p-3">
-              {(() => {
-                const Icon = MATERIAL_ICONS[selected.type] ?? File;
-                return (
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-muted-foreground">
-                    <Icon className="h-4 w-4" />
-                  </span>
-                );
-              })()}
+          <div className="rounded-2xl border bg-background p-3">
+            <div className="flex items-start gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-muted-foreground">
+                <ListChecks className="h-4 w-4" />
+              </span>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{selected.name}</div>
+                <div className="text-sm font-medium">
+                  {selectedTopics.length} topic{selectedTopics.length === 1 ? "" : "s"}
+                </div>
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  <span className="chip">{MATERIAL_TYPE_LABELS[selected.type] ?? selected.kind}</span>
-                  {selected.added ? <span className="chip">{selected.added}</span> : null}
+                  {selectedTopics.slice(0, 4).map((topic) => (
+                    <span key={topic.id} className="chip">
+                      {topic.name}
+                    </span>
+                  ))}
+                  {selectedTopics.length > 4 ? (
+                    <span className="chip">+{selectedTopics.length - 4} more</span>
+                  ) : null}
                 </div>
               </div>
-              <button className="btn btn-ghost" onClick={() => setStep("material")}>
+              <button className="btn btn-ghost" onClick={() => setStep("topics")}>
                 <ArrowLeft className="h-4 w-4" />
                 Change
               </button>
             </div>
-          ) : null}
+          </div>
 
           <Field label="Number of questions">
             <PillGroup<number>
@@ -344,11 +295,7 @@ export function QuizBuilder({ open, onOpenChange, courseId, onStart }: QuizBuild
           </Field>
 
           <Field label="Difficulty">
-            <PillGroup
-              options={QUIZ_DIFFICULTIES}
-              value={difficulty}
-              onChange={setDifficulty}
-            />
+            <PillGroup options={QUIZ_DIFFICULTIES} value={difficulty} onChange={setDifficulty} />
           </Field>
 
           <Field label="Question types">
@@ -358,9 +305,7 @@ export function QuizBuilder({ open, onOpenChange, courseId, onStart }: QuizBuild
               onChange={toggleType}
             />
             {types.length === 0 ? (
-              <p className="mt-2 text-xs text-destructive">
-                Choose at least one question type.
-              </p>
+              <p className="mt-2 text-xs text-destructive">Choose at least one question type.</p>
             ) : null}
           </Field>
 
@@ -368,7 +313,10 @@ export function QuizBuilder({ open, onOpenChange, courseId, onStart }: QuizBuild
           <div className="rounded-2xl border bg-background p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <label htmlFor="quiz-timer-enabled" className="flex items-center gap-2 text-sm font-medium">
+                <label
+                  htmlFor="quiz-timer-enabled"
+                  className="flex items-center gap-2 text-sm font-medium"
+                >
                   <Clock className="h-4 w-4 text-muted-foreground" />
                   Enable timer
                 </label>
@@ -396,36 +344,74 @@ export function QuizBuilder({ open, onOpenChange, courseId, onStart }: QuizBuild
                 </Field>
                 <p className="mt-2 text-xs text-muted-foreground" role="status">
                   Time limit:{" "}
-                  <span className="font-medium text-foreground">{timerMinutes} minutes</span>{" "}
-                  ({timerMinutes}:00). The countdown starts when the quiz opens.
+                  <span className="font-medium text-foreground">{timerMinutes} minutes</span> (
+                  {timerMinutes}:00). The countdown starts when the quiz opens.
                 </p>
               </div>
             ) : null}
           </div>
 
+          {errorMessage ? (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <span>{errorMessage}</span>
+                {/* Retry re-generates with the topics and settings still selected. */}
+                <button
+                  type="button"
+                  className="mt-1 inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline disabled:opacity-60"
+                  onClick={generate}
+                  disabled={generateQuiz.isPending}
+                >
+                  {generateQuiz.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  {generateQuiz.isPending ? "Retrying…" : "Retry"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {/* Summary + generate */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-            <p className="text-xs text-muted-foreground">
-              {questionCount} questions · {difficulty} ·{" "}
-              {types.length === 1 ? "1 type" : `${types.length} types`} ·{" "}
-              {timerEnabled ? `${timerMinutes}-minute timer` : "no timer"}
+            <p className="text-xs text-muted-foreground" role="status" aria-live="polite">
+              {generateQuiz.isPending
+                ? "Generating questions with AI…"
+                : `${questionCount} questions · ${difficulty} · ` +
+                  `${types.length === 1 ? "1 type" : `${types.length} types`} · ` +
+                  `${timerEnabled ? `${timerMinutes}-minute timer` : "no timer"}`}
             </p>
             <div className="flex items-center gap-2">
-              <button className="btn btn-ghost" onClick={() => setStep("material")}>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setStep("topics")}
+                disabled={generateQuiz.isPending}
+              >
                 Back
               </button>
-              <button className="btn btn-primary" onClick={generate} disabled={!canGenerate}>
-                <Sparkles className="h-4 w-4" />
-                Generate Quiz
+              <button
+                className={cn("btn btn-primary")}
+                onClick={generate}
+                disabled={!canGenerate || generateQuiz.isPending}
+              >
+                {generateQuiz.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                {generateQuiz.isPending
+                  ? "Generating…"
+                  : errorMessage
+                    ? "Try again"
+                    : "Generate Quiz"}
               </button>
             </div>
           </div>
-
-          <p className="flex items-start gap-2 rounded-xl border border-dashed bg-secondary/40 px-3 py-2.5 text-xs text-muted-foreground">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
-            Demo mode: questions are hand-written placeholders. Quiz generation is not
-            connected to AI yet, so nothing here is graded or saved.
-          </p>
         </div>
       )}
     </Modal>

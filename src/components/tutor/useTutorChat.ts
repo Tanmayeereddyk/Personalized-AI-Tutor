@@ -60,7 +60,16 @@ export interface TutorChat {
   messages: ChatMessage[];
   pending: boolean;
   send: (text: string) => void;
+  retry: () => void;
   reset: () => void;
+}
+
+/** Replay the recent conversation so follow-up questions keep context. */
+function historyFrom(messages: ChatMessage[]) {
+  return messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .slice(-10)
+    .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 }
 
 export function useTutorChat(courseId: string): TutorChat {
@@ -83,21 +92,11 @@ export function useTutorChat(courseId: string): TutorChat {
     persist(key, messages);
   }, [key, messages]);
 
-  const send = useCallback(
-    async (text: string) => {
-      const content = text.trim();
-      if (!content || pending) return;
-
-      // Replay the recent conversation so follow-up questions keep context.
-      const history = messages
-        .filter((m) => m.role === "user" || m.role === "assistant")
-        .slice(-10)
-        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
-
-      setMessages((m) => [...m, { id: newId(), role: "user", content }]);
+  const runAsk = useCallback(
+    async (question: string, history: { role: "user" | "assistant"; content: string }[]) => {
       setPending(true);
       try {
-        const answer = await api.tutor.ask(courseId, { question: content, history });
+        const answer = await api.tutor.ask(courseId, { question, history });
         setMessages((m) => [
           ...m,
           {
@@ -115,18 +114,46 @@ export function useTutorChat(courseId: string): TutorChat {
           error instanceof Error
             ? error.message
             : "The tutor is unavailable right now. Please try again.";
+        // Errors are shown as a system message — never a made-up answer — and
+        // the last one carries a Retry action back to the same question.
         setMessages((m) => [...m, { id: newId(), role: "system", content: message }]);
       } finally {
         setPending(false);
       }
     },
-    [courseId, pending, messages],
+    [courseId],
   );
+
+  const send = useCallback(
+    (text: string) => {
+      const content = text.trim();
+      if (!content || pending) return;
+
+      const history = historyFrom(messages);
+      setMessages((m) => [...m, { id: newId(), role: "user", content }]);
+      void runAsk(content, history);
+    },
+    [messages, pending, runAsk],
+  );
+
+  // Re-send the most recent question after a failure, reusing it exactly.
+  const retry = useCallback(() => {
+    if (pending) return;
+    const lastUserIndex = [...messages].reverse().findIndex((m) => m.role === "user");
+    if (lastUserIndex === -1) return;
+    const index = messages.length - 1 - lastUserIndex;
+    const question = messages[index];
+    if (!question) return;
+    // Drop the trailing system error so a retry doesn't stack messages.
+    const kept = messages.slice(0, index + 1);
+    setMessages(kept);
+    void runAsk(question.content, historyFrom(kept.slice(0, -1)));
+  }, [messages, pending, runAsk]);
 
   const reset = useCallback(() => {
     setPending(false);
     setMessages([]);
   }, []);
 
-  return { messages, pending, send, reset };
+  return { messages, pending, send, retry, reset };
 }

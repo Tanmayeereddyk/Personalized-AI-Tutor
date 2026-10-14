@@ -50,6 +50,9 @@ class Settings:
     # in one call, and the most topics it may return for a course.
     RAG_TOPICS_MAX_SOURCE_CHARS: int = int(os.getenv("RAG_TOPICS_MAX_SOURCE_CHARS", "12000"))
     RAG_TOPICS_MAX: int = int(os.getenv("RAG_TOPICS_MAX", "12"))
+    # Quiz generation: how much of the selected topics' indexed content is offered
+    # to the model in one call. Questions are generated on demand and not stored.
+    RAG_QUIZ_MAX_SOURCE_CHARS: int = int(os.getenv("RAG_QUIZ_MAX_SOURCE_CHARS", "14000"))
 
     # ------------------------------------------------------------------
     # LLM (required for notes generation and the tutor). Any OpenAI-compatible
@@ -76,8 +79,21 @@ class Settings:
     LLM_MAX_CONNECTIONS: int = int(os.getenv("LLM_MAX_CONNECTIONS", "16"))
     # Transient provider errors (HTTP 429, 5xx, timeouts) are retried this many
     # times per model, then the next model in LLM_FALLBACK_MODELS is tried.
-    LLM_MAX_ATTEMPTS: int = int(os.getenv("LLM_MAX_ATTEMPTS", "2"))
+    # Kept deliberately small so a busy provider fails fast with a clear
+    # message instead of a long wait; raise it if your quota allows waiting.
+    LLM_MAX_ATTEMPTS: int = int(os.getenv("LLM_MAX_ATTEMPTS", "3"))
+    # Exponential backoff base between retries: attempt N waits roughly
+    # LLM_RETRY_BACKOFF_SECONDS * 2**N, scaled by a random jitter so parallel
+    # requests do not retry in lockstep.
     LLM_RETRY_BACKOFF_SECONDS: float = float(os.getenv("LLM_RETRY_BACKOFF_SECONDS", "0.8"))
+    # Hard cap on any single retry wait. A provider's Retry-After header is
+    # honoured up to this many seconds, so one slow request can never hang a
+    # web request indefinitely. It doubles as the line between a transient rate
+    # limit and an *exhausted quota*: a 429 that asks us to wait longer than
+    # this is not retried on the same model (see llm_service).
+    LLM_RETRY_MAX_BACKOFF_SECONDS: float = float(
+        os.getenv("LLM_RETRY_MAX_BACKOFF_SECONDS", "10")
+    )
     # Comma-separated backup models, tried in order when the primary model is
     # overloaded or rate-limited (Google return 503 "high demand" fairly often).
     LLM_FALLBACK_MODELS: str = os.getenv("LLM_FALLBACK_MODELS", "")

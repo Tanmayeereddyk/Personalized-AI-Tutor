@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from app.main import app
 from app.services import extraction_service, extractors, llm_service, rag_service, topic_service
@@ -246,7 +247,7 @@ def test_generate_on_empty_course_is_graceful(
     assert "add materials" in response.json()["detail"].lower()
 
 
-def test_generate_without_indexed_content_is_graceful(
+def test_generate_without_processed_content_is_graceful(
     client, logged_in_user, monkeypatch
 ) -> None:
     _user, headers = logged_in_user
@@ -257,7 +258,7 @@ def test_generate_without_indexed_content_is_graceful(
         f"/api/courses/{course_id}/topics/generate", headers=headers
     )
     assert response.status_code == 400
-    assert "indexed" in response.json()["detail"].lower()
+    assert "processing" in response.json()["detail"].lower()
 
 
 # ---------------------------------------------------------------
@@ -325,6 +326,106 @@ def test_other_users_topics_are_hidden(client, fake_supabase, logged_in_user) ->
             f"/api/courses/{their_course}/topics/generate", headers=headers
         ).status_code
         == 404
+    )
+
+
+# ---------------------------------------------------------------
+# Robust parsing of real-world model output
+# ---------------------------------------------------------------
+_TWO_TOPICS_JSON = '[{"name": "Photosynthesis", "description": "d", "topic_group": "Biology"}]'
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        # The happy path: a strict JSON object.
+        '{"topics": ' + _TWO_TOPICS_JSON + "}",
+        # A bare array (older prompt shape).
+        _TWO_TOPICS_JSON,
+        # Wrapped in a Markdown code fence.
+        "```json\n" + _TWO_TOPICS_JSON + "\n```",
+        # Prose / citations before the payload (the first "[" is a citation).
+        "Based on passages [1][2], here are the topics:\n" + _TWO_TOPICS_JSON,
+        # Prose after the payload.
+        _TWO_TOPICS_JSON + "\n\nLet me know if you want more detail.",
+        # A literal newline inside a string (invalid JSON as written).
+        '[{"name": "Photosynthesis", "description": "line one\nline two"}]',
+        # A trailing comma.
+        '[{"name": "Photosynthesis", "description": "d",},]',
+        # Python-style single quotes.
+        "[{'name': 'Photosynthesis', 'description': 'd'}]",
+        # Truncated mid-string because the token budget ran out.
+        '[{"name": "Photosynthesis", "description": "trunca',
+    ],
+)
+def test_parse_entries_handles_real_world_shapes(raw: str) -> None:
+    entries = topic_service._parse_entries(raw)
+    assert [entry["name"] for entry in entries] == ["Photosynthesis"]
+    assert all("{" not in entry["name"] for entry in entries)
+
+
+def test_parse_entries_rejects_non_topic_output() -> None:
+    with pytest.raises(HTTPException) as excinfo:
+        topic_service._parse_entries("not json at all")
+    assert excinfo.value.status_code == 502
+    # And an empty reply is a clear failure, never a silent "no topics".
+    with pytest.raises(HTTPException):
+        topic_service._parse_entries("")
+
+
+def test_parse_entries_never_returns_raw_text_as_topics() -> None:
+    # A JSON list of numbers is valid JSON but not topics — reject it.
+    with pytest.raises(HTTPException):
+        topic_service._parse_entries("[1, 2, 3]")
+
+
+def test_topic_source_material_ids_follow_cited_passages(
+    client, fake_supabase, logged_in_user, monkeypatch
+) -> None:
+    user, headers = logged_in_user
+    course_id = _course(client, headers)
+    first = _upload_material(client, headers, course_id, name="first.pdf")
+    second = _upload_material(client, headers, course_id, name="second.pdf")
+    _seed_chunks(
+        fake_supabase, user_id=user.id, course_id=course_id, material_id=first,
+        contents=["Photosynthesis converts light to chemical energy."],
+    )
+    _seed_chunks(
+        fake_supabase, user_id=user.id, course_id=course_id, material_id=second,
+        contents=["Cell division produces two daughter cells."],
+    )
+
+    # Passages are ordered by material UUID, so #1 is not necessarily the first
+    # file uploaded (UUIDs are random). Cite the passage that actually belongs
+    # to first.pdf to verify the material mapping rather than upload ordering.
+    first_passage = 1 if first < second else 2
+    monkeypatch.setattr(
+        llm_service,
+        "complete",
+        lambda system, user, **kwargs: json.dumps(
+            {"topics": [{"name": "Photosynthesis", "source_indexes": [first_passage]}]}
+        ),
+    )
+
+    response = client.post(
+        f"/api/courses/{course_id}/topics/generate", headers=headers
+    )
+    assert response.status_code == 201, response.text
+    topic = response.json()[0]
+    assert topic["source_material_ids"] == [first]
+
+
+def test_generation_is_rejected_while_one_is_already_running() -> None:
+    key = topic_service._begin_generation("guard-user", "guard-course")
+    try:
+        with pytest.raises(HTTPException) as excinfo:
+            topic_service._begin_generation("guard-user", "guard-course")
+        assert excinfo.value.status_code == 409
+    finally:
+        topic_service._end_generation(key)
+    # The slot is released afterwards, so a later click succeeds.
+    topic_service._end_generation(
+        topic_service._begin_generation("guard-user", "guard-course")
     )
 
 

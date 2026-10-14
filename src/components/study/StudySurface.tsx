@@ -267,6 +267,7 @@ export function StudySurface({
         value={draft}
         onValueChange={setDraft}
         onSend={chat.send}
+        onRetry={chat.retry}
         onReset={chat.reset}
       />
     </div>

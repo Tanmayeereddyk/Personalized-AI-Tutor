@@ -8,6 +8,7 @@ import {
   FileText,
   LayoutGrid,
   RotateCw,
+  Sparkles,
   Timer,
   X,
   XCircle,
@@ -22,16 +23,16 @@ import {
   formatClock,
   isAnswerCorrect,
   labelForQuestionType,
-  type MockQuiz,
-  type MockQuizQuestion,
-} from "@/lib/quiz-mock";
+  type GeneratedQuiz,
+  type QuizQuestion,
+} from "@/lib/quiz";
 import { scoreTone } from "@/components/practice/Builder";
 
 type Phase = "taking" | "results";
 type SubmitReason = "manual" | "timeout";
 
 interface QuizRunnerProps {
-  quiz: MockQuiz;
+  quiz: GeneratedQuiz;
   /** Leave the quiz entirely (back to the quiz list). */
   onExit: () => void;
 }
@@ -134,9 +135,7 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
     setConfirmSubmit(false);
     setConfirmExit(false);
     setNavOpen(false);
-    setDeadline(
-      quiz.timerMinutes != null ? Date.now() + quiz.timerMinutes * 60_000 : null,
-    );
+    setDeadline(quiz.timerMinutes != null ? Date.now() + quiz.timerMinutes * 60_000 : null);
     resetScroll();
   }, [quiz.timerMinutes, resetScroll]);
 
@@ -190,10 +189,9 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
             className="flex items-center gap-2 truncate text-sm font-semibold sm:text-base"
           >
             <span className="truncate">{title}</span>
-            <span className="chip hidden shrink-0 sm:inline-flex">Demo</span>
           </h1>
           <p className="truncate text-xs text-muted-foreground">
-            {quiz.materialName} · {total} questions
+            {quiz.scopeLabel} · {total} questions
           </p>
         </div>
 
@@ -210,21 +208,13 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
                   : "bg-background text-foreground",
             )}
           >
-            {isCritical ? (
-              <AlertTriangle className="h-4 w-4" />
-            ) : (
-              <Clock className="h-4 w-4" />
-            )}
+            {isCritical ? <AlertTriangle className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
             {formatClock(remainingMs)}
           </div>
         ) : null}
 
         {phase === "taking" ? (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setConfirmSubmit(true)}
-          >
+          <button type="button" className="btn btn-primary" onClick={() => setConfirmSubmit(true)}>
             <CheckCircle2 className="h-4 w-4" />
             <span className="hidden sm:inline">Submit Quiz</span>
             <span className="sm:hidden">Submit</span>
@@ -244,8 +234,7 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
               <main className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm text-muted-foreground">
-                    Question{" "}
-                    <span className="font-medium text-foreground">{index + 1}</span> of{" "}
+                    Question <span className="font-medium text-foreground">{index + 1}</span> of{" "}
                     {total}
                   </p>
                   <button
@@ -358,9 +347,7 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
               <div className="relative mx-auto h-[140px] w-[140px]">
                 <Ring value={pct} />
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className={cn("text-3xl font-semibold", scoreTone(pct))}>
-                    {pct}%
-                  </span>
+                  <span className={cn("text-3xl font-semibold", scoreTone(pct))}>{pct}%</span>
                   <span className="text-xs text-muted-foreground">
                     {score}/{total} correct
                   </span>
@@ -386,16 +373,14 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
                   </span>
                 ))}
                 <span className="chip">
-                  {quiz.timerMinutes != null
-                    ? `${quiz.timerMinutes}-minute timer`
-                    : "No timer"}
+                  {quiz.timerMinutes != null ? `${quiz.timerMinutes}-minute timer` : "No timer"}
                 </span>
               </div>
 
               <p className="mt-5 flex items-start justify-center gap-2 rounded-xl border border-dashed bg-secondary/40 px-3 py-2 text-left text-xs text-muted-foreground">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
-                These results are a demo: answers are checked locally against
-                placeholder questions, not by AI.
+                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                These questions were generated from the topics you selected, grounded in your
+                uploaded materials.
               </p>
 
               <div className="mt-5 flex flex-wrap justify-center gap-2">
@@ -442,9 +427,7 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
 
                       <dl className="mt-3 space-y-1.5 text-sm">
                         <div className="flex gap-2">
-                          <dt className="w-28 shrink-0 text-muted-foreground">
-                            Your answer
-                          </dt>
+                          <dt className="w-28 shrink-0 text-muted-foreground">Your answer</dt>
                           <dd
                             className={cn(
                               "min-w-0 break-words",
@@ -454,17 +437,13 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
                             {given.trim() ? (
                               <MathText text={given} />
                             ) : (
-                              <span className="italic text-muted-foreground">
-                                Not answered
-                              </span>
+                              <span className="italic text-muted-foreground">Not answered</span>
                             )}
                           </dd>
                         </div>
                         {!correct ? (
                           <div className="flex gap-2">
-                            <dt className="w-28 shrink-0 text-muted-foreground">
-                              Correct answer
-                            </dt>
+                            <dt className="w-28 shrink-0 text-muted-foreground">Correct answer</dt>
                             <dd className="min-w-0 break-words">
                               <MathText text={q.correctAnswer} />
                             </dd>
@@ -479,9 +458,9 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
                       {q.source ? (
                         <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
                           <FileText className="h-3.5 w-3.5" />
-                          Source:{" "}
-                          <span className="text-foreground">{q.source.materialName}</span>{" "}
-                          · {q.source.label}
+                          Source: <span className="text-foreground">
+                            {q.source.materialName}
+                          </span> · {q.source.label}
                         </p>
                       ) : null}
                     </div>
@@ -512,18 +491,10 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
             : "All questions answered."}
         </p>
         <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => setConfirmSubmit(false)}
-          >
+          <button type="button" className="btn btn-ghost" onClick={() => setConfirmSubmit(false)}>
             Keep working
           </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => finish("manual")}
-          >
+          <button type="button" className="btn btn-primary" onClick={() => finish("manual")}>
             Submit Quiz
           </button>
         </div>
@@ -542,18 +513,10 @@ export function QuizRunner({ quiz, onExit }: QuizRunnerProps) {
         }
       >
         <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => setConfirmExit(false)}
-          >
+          <button type="button" className="btn btn-ghost" onClick={() => setConfirmExit(false)}>
             Keep going
           </button>
-          <button
-            type="button"
-            className="btn btn-ghost text-destructive"
-            onClick={onExit}
-          >
+          <button type="button" className="btn btn-ghost text-destructive" onClick={onExit}>
             Leave quiz
           </button>
         </div>
@@ -568,7 +531,7 @@ function AnswerControl({
   value,
   onChange,
 }: {
-  question: MockQuizQuestion;
+  question: QuizQuestion;
   index: number;
   value: string;
   onChange: (value: string) => void;
@@ -588,14 +551,13 @@ function AnswerControl({
           placeholder="Type a short answer…"
         />
         <p className="mt-2 text-xs text-muted-foreground">
-          Demo marking is loose: capitalisation and extra spaces are ignored.
+          Marking is loose: capitalisation and extra spaces are ignored.
         </p>
       </div>
     );
   }
 
-  const options =
-    question.options ?? (question.type === "true-false" ? ["True", "False"] : []);
+  const options = question.options ?? (question.type === "true-false" ? ["True", "False"] : []);
 
   return (
     <RadioGroup
@@ -636,7 +598,7 @@ function QuestionNav({
   index,
   onPick,
 }: {
-  questions: MockQuizQuestion[];
+  questions: QuizQuestion[];
   answers: Record<string, string>;
   index: number;
   onPick: (index: number) => void;

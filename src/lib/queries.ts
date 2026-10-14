@@ -12,6 +12,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import { useAuth } from "./auth";
 import { generateNotesWithProgress, type NotesPhase } from "./notes-generation";
+import type { QuizConfig } from "./quiz";
+import type { Quiz } from "./types";
 
 export const useMaterials = (courseId: string) => {
   const { user } = useAuth();
@@ -60,8 +62,7 @@ export const useMaterialPreview = (materialId: string, enabled = true) => {
     queryKey: ["material-preview", user?.id, materialId],
     queryFn: () => api.materials.previewStatus(materialId),
     enabled: !!user && !!materialId && enabled,
-    refetchInterval: (query) =>
-      query.state.data?.status === "processing" ? 1500 : false,
+    refetchInterval: (query) => (query.state.data?.status === "processing" ? 1500 : false),
   });
 };
 
@@ -76,10 +77,7 @@ export const useStartMaterialPreview = (materialId: string) => {
   return useMutation({
     mutationFn: () => api.materials.startPreview(materialId),
     onSuccess: (data) => {
-      queryClient.setQueryData(
-        ["material-preview", user?.id, materialId],
-        data,
-      );
+      queryClient.setQueryData(["material-preview", user?.id, materialId], data);
     },
   });
 };
@@ -300,6 +298,48 @@ export const useCreateQuiz = (courseId: string) => {
   });
 };
 
+/**
+ * Generate a quiz from the selected topics with the backend language model.
+ *
+ * The questions are written by the LLM from the topics' indexed source content
+ * (via the `/quizzes/generate` endpoint); nothing is generated in the browser
+ * and there is no mock fallback. Errors (no content, model unavailable, …) are
+ * surfaced to the caller so the UI can show a message and allow a retry.
+ */
+export const useGenerateQuiz = (courseId: string) => {
+  return useMutation({
+    mutationFn: (input: { topicIds: string[]; config: QuizConfig }) =>
+      api.quizzes.generate(courseId, {
+        topicIds: input.topicIds,
+        questionCount: input.config.questionCount,
+        difficulty: input.config.difficulty,
+        questionTypes: input.config.questionTypes,
+        timerMinutes: input.config.timerMinutes,
+      }),
+  });
+};
+
+/**
+ * Delete a saved quiz attempt.
+ *
+ * The row is dropped from the cached list only after the backend confirms the
+ * delete, so a failed request keeps the quiz visible (and shows an error)
+ * instead of removing it optimistically.
+ */
+export const useDeleteQuiz = (courseId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (quizId: string) => api.quizzes.remove(quizId),
+    onSuccess: (_quiz, quizId) => {
+      queryClient.setQueryData<Quiz[]>(["quizzes", user?.id, courseId], (current) =>
+        current ? current.filter((quiz) => quiz.id !== quizId) : current,
+      );
+      queryClient.invalidateQueries({ queryKey: ["quizzes", user?.id, courseId] });
+    },
+  });
+};
+
 export const useFlashcardDecks = (courseId: string) => {
   const { user } = useAuth();
   return useQuery({
@@ -346,7 +386,8 @@ export const useUpdateFlashcard = (deckId: string) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: { front?: string; back?: string } }) => api.flashcards.update(id, input),
+    mutationFn: ({ id, input }: { id: string; input: { front?: string; back?: string } }) =>
+      api.flashcards.update(id, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flashcards", user?.id, deckId] });
     },

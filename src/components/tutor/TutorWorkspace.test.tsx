@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { api } from "@/lib/api";
 import { TutorWorkspace } from "./TutorWorkspace";
 
 vi.mock("@/lib/auth", () => ({
@@ -25,6 +26,7 @@ vi.mock("@/lib/store", () => ({
 
 vi.mock("@/lib/queries", () => ({
   useNotes: () => ({ data: [], isLoading: false, isError: false, error: null, refetch: vi.fn() }),
+  useDeleteNote: () => ({ mutateAsync: vi.fn(async () => {}), isPending: false }),
   useMaterials: () => ({
     data: [],
     isLoading: false,
@@ -141,5 +143,26 @@ describe("TutorWorkspace", () => {
 
     render(<TutorWorkspace courseId="c1" />);
     expect(screen.getByText("Remember this")).toBeInTheDocument();
+  });
+
+  it("offers a retry after a failure and re-asks the same question", async () => {
+    const ask = vi.mocked(api.tutor.ask);
+    ask.mockClear();
+    ask.mockRejectedValueOnce(
+      new Error("The AI service is temporarily busy. Please try again shortly."),
+    );
+
+    render(<TutorWorkspace courseId="c1" />);
+    sendMessage("Explain dynamic programming");
+
+    // The failure shows as a system message with a retry action — never a
+    // made-up answer.
+    expect(await screen.findByText(/temporarily busy/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Retry/i }));
+
+    // The retry re-asks the same question and then shows the grounded answer.
+    expect(await screen.findByText(/Grounded answer from your materials/)).toBeInTheDocument();
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(ask.mock.calls[1]?.[1]).toMatchObject({ question: "Explain dynamic programming" });
   });
 });

@@ -14,7 +14,8 @@ import type {
   Course,
   ExtractedUnit,
   ExtractionStatus,
-  Flashcard, FlashcardDeck,
+  Flashcard,
+  FlashcardDeck,
   IndexStatus,
   Material,
   MaterialChunk,
@@ -26,6 +27,7 @@ import type {
   TutorTurn,
   User,
 } from "./types";
+import type { GeneratedQuiz, QuizQuestion, QuizQuestionType } from "./quiz";
 
 const BASE = (
   (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:8000"
@@ -433,6 +435,38 @@ interface QuizDto {
   updated_at: string | null;
 }
 
+interface QuizQuestionSourceDto {
+  label: string;
+  material_id: string | null;
+  material_name: string;
+  snippet: string;
+}
+
+interface QuizQuestionDto {
+  id: string;
+  type: string;
+  prompt: string;
+  options: string[] | null;
+  correct_answer: string;
+  accepted_answers: string[] | null;
+  explanation: string;
+  source: QuizQuestionSourceDto | null;
+}
+
+interface GeneratedQuizDto {
+  id: string;
+  course_id: string;
+  title: string;
+  scope_label: string;
+  topic_ids: string[];
+  topic_names: string[];
+  difficulty: string;
+  question_types: string[];
+  timer_minutes: number | null;
+  generated_at: string;
+  questions: QuizQuestionDto[];
+}
+
 interface TopicDto {
   id: string;
   user_id: string;
@@ -650,6 +684,48 @@ export const toQuiz = (dto: QuizDto): Quiz => ({
   date: friendlyDate(dto.created_at),
 });
 
+const QUIZ_QUESTION_TYPE_VALUES: QuizQuestionType[] = [
+  "multiple-choice",
+  "true-false",
+  "short-answer",
+];
+
+const toQuizQuestionType = (value: string): QuizQuestionType =>
+  QUIZ_QUESTION_TYPE_VALUES.includes(value as QuizQuestionType)
+    ? (value as QuizQuestionType)
+    : "short-answer";
+
+const toQuizQuestion = (dto: QuizQuestionDto): QuizQuestion => ({
+  id: dto.id,
+  type: toQuizQuestionType(dto.type),
+  prompt: dto.prompt,
+  options: dto.options ?? undefined,
+  correctAnswer: dto.correct_answer,
+  acceptedAnswers: dto.accepted_answers ?? undefined,
+  explanation: dto.explanation,
+  source: dto.source
+    ? {
+        label: dto.source.label,
+        materialName: dto.source.material_name,
+        snippet: dto.source.snippet,
+      }
+    : undefined,
+});
+
+export const toGeneratedQuiz = (dto: GeneratedQuizDto): GeneratedQuiz => ({
+  id: dto.id,
+  courseId: dto.course_id,
+  title: dto.title,
+  scopeLabel: dto.scope_label,
+  topicIds: dto.topic_ids ?? [],
+  topicNames: dto.topic_names ?? [],
+  difficulty: (dto.difficulty as GeneratedQuiz["difficulty"]) ?? "Medium",
+  questionTypes: (dto.question_types ?? []).map(toQuizQuestionType),
+  timerMinutes: dto.timer_minutes,
+  generatedAt: dto.generated_at,
+  questions: (dto.questions ?? []).map(toQuizQuestion),
+});
+
 export const toTopic = (dto: TopicDto): Topic => ({
   id: dto.id,
   courseId: dto.course_id,
@@ -679,7 +755,7 @@ export const toFlashcard = (dto: FlashcardDto): Flashcard => ({
   userId: dto.user_id,
   front: dto.front,
   back: dto.back,
-  createdAt: dto.created_at ?? '',
+  createdAt: dto.created_at ?? "",
   courseId: undefined,
 });
 
@@ -849,9 +925,7 @@ export const api = {
      * as a PDF, or fall back to slide text). Poll while `processing`.
      */
     async previewStatus(id: string): Promise<MaterialPreview> {
-      return toMaterialPreview(
-        await request<MaterialPreviewDto>(`/api/materials/${id}/preview`),
-      );
+      return toMaterialPreview(await request<MaterialPreviewDto>(`/api/materials/${id}/preview`));
     },
     /**
      * Idempotently start preparing a presentation's inline preview.
@@ -1015,18 +1089,16 @@ export const api = {
      * language model is not configured (503).
      */
     async generate(courseId: string): Promise<Topic[]> {
-      const dto = await request<TopicDto[]>(
-        `/api/courses/${courseId}/topics/generate`,
-        { method: "POST" },
-      );
+      const dto = await request<TopicDto[]>(`/api/courses/${courseId}/topics/generate`, {
+        method: "POST",
+      });
       return dto.map(toTopic);
     },
     /** Re-generate the knowledge map (e.g. after adding new materials). */
     async refresh(courseId: string): Promise<Topic[]> {
-      const dto = await request<TopicDto[]>(
-        `/api/courses/${courseId}/topics/refresh`,
-        { method: "POST" },
-      );
+      const dto = await request<TopicDto[]>(`/api/courses/${courseId}/topics/refresh`, {
+        method: "POST",
+      });
       return dto.map(toTopic);
     },
     /** One topic from the knowledge map (owner only). */
@@ -1054,6 +1126,47 @@ export const api = {
         await request<QuizDto>(`/api/courses/${courseId}/quizzes`, { method: "POST", body: input }),
       );
     },
+    /**
+     * Generate a quiz from the selected topics with the backend language model.
+     * Only topic ids and the quiz settings are sent — the server resolves each
+     * topic's source materials and content internally. Fails with an actionable
+     * message when the selection has no indexed content (400) or the model is
+     * not configured / unavailable (502/503); it never falls back to mock
+     * questions.
+     */
+    async generate(
+      courseId: string,
+      input: {
+        topicIds: string[];
+        questionCount: number;
+        difficulty: string;
+        questionTypes: QuizQuestionType[];
+        timerMinutes: number | null;
+      },
+    ): Promise<GeneratedQuiz> {
+      return toGeneratedQuiz(
+        await request<GeneratedQuizDto>(`/api/courses/${courseId}/quizzes/generate`, {
+          method: "POST",
+          body: {
+            topic_ids: input.topicIds,
+            question_count: input.questionCount,
+            difficulty: input.difficulty,
+            question_types: input.questionTypes,
+            timer_minutes: input.timerMinutes,
+          },
+        }),
+      );
+    },
+    /**
+     * Delete a saved quiz attempt.
+     *
+     * The backend only deletes rows that belong to the caller, so another
+     * user's quiz id returns 404 rather than a confirmation. The course's
+     * source materials and topics are never touched.
+     */
+    async remove(id: string): Promise<void> {
+      await request(`/api/quizzes/${id}`, { method: "DELETE" });
+    },
   },
   decks: {
     async list(courseId: string): Promise<FlashcardDeck[]> {
@@ -1078,10 +1191,17 @@ export const api = {
       return dto.map(toFlashcard);
     },
     async create(deckId: string, input: { front: string; back: string }): Promise<Flashcard> {
-      return toFlashcard(await request<FlashcardDto>(`/api/decks/${deckId}/flashcards`, { method: "POST", body: input }));
+      return toFlashcard(
+        await request<FlashcardDto>(`/api/decks/${deckId}/flashcards`, {
+          method: "POST",
+          body: input,
+        }),
+      );
     },
     async update(id: string, input: { front?: string; back?: string }): Promise<Flashcard> {
-      return toFlashcard(await request<FlashcardDto>(`/api/flashcards/${id}`, { method: "PUT", body: input }));
+      return toFlashcard(
+        await request<FlashcardDto>(`/api/flashcards/${id}`, { method: "PUT", body: input }),
+      );
     },
     async remove(id: string): Promise<void> {
       await request(`/api/flashcards/${id}`, { method: "DELETE" });

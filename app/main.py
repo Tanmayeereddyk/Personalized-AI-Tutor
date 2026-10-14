@@ -18,6 +18,7 @@ from app.api.routes import (
     health,
     learning,
     materials,
+    quizzes,
     rag,
     topics,
 )
@@ -63,6 +64,7 @@ app.include_router(learning.events_router)
 app.include_router(learning.bookmarks_router)
 app.include_router(learning.flashcards_router)
 app.include_router(topics.router)
+app.include_router(quizzes.router)
 
 
 @app.get("/", tags=["root"])

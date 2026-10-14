@@ -59,6 +59,7 @@ vi.mock("@/lib/queries", () => ({
     error: null,
     refetch: vi.fn(),
   }),
+  useDeleteNote: () => ({ mutateAsync: vi.fn(async () => {}), isPending: false }),
 }));
 
 vi.mock("@/lib/api", () => ({

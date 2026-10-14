@@ -28,6 +28,7 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/queries", () => ({
   useNotes: () => ({ data: [], isLoading: false, isError: false, error: null, refetch: vi.fn() }),
+  useDeleteNote: () => ({ mutateAsync: vi.fn(async () => {}), isPending: false }),
   useMaterials: () => ({
     data: [],
     isLoading: false,
