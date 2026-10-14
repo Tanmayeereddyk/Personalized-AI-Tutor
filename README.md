@@ -1,6 +1,6 @@
-# StudyAI Backend
+# Lumio Backend
 
-The backend for **StudyAI**, an AI-powered study assistant built for an AI/ML hackathon.
+The backend for **Lumio**, an AI-powered study assistant built for an AI/ML hackathon.
 
 **Production deployment:** The live frontend communicates with the deployed backend. Localhost URLs in the setup and testing sections are only for local development. To access the deployed API documentation, open `https://lumio-frontend-njmh.onrender.com` if the hosting configuration exposes the FastAPI docs.
 > **Current status: Phase 1 — Part 2.**
@@ -22,7 +22,7 @@ The full-stack app has two parts in this repository:
 - **Validation for free** — Pydantic checks request/response data.
 - **Easy to test** — tests call the app without starting a server.
 
-## 2. What is Supabase? Why does StudyAI use it?
+## 2. What is Supabase? Why does Lumio use it?
 
 **Supabase** is an open-source backend platform that gives us:
 
@@ -31,7 +31,7 @@ The full-stack app has two parts in this repository:
 - **Row Level Security** (database-level permissions),
 - a hosted project with a SQL editor and dashboard.
 
-StudyAI uses it so a student team can focus on the AI features instead of building
+Lumio uses it so a student team can focus on the AI features instead of building
 user accounts and a database from scratch.
 
 ### What Supabase Auth does
@@ -102,7 +102,7 @@ JSON response
 ## 5. Folder structure
 
 ```text
-StudyAI (project root)
+Lumio (project root)
 ├── app/                    # FastAPI backend
 │   ├── main.py             # Creates the app, CORS, registers routers
 │   ├── core/
@@ -240,7 +240,7 @@ The frontend talks to the backend over HTTP; CORS allows the origin set in
 ## 8. Create a Supabase project
 
 1. Go to <https://supabase.com> and sign up (free).
-2. Click **New project**, give it a name (e.g. `studyai`), and set a database password.
+2. Click **New project**, give it a name (e.g. `Lumio`), and set a database password.
 3. Wait for the project to be created, then open **Project Settings → API**.
 4. Copy the three values:
    - **Project URL** → `SUPABASE_URL`
@@ -256,7 +256,7 @@ Copy-Item .env.example .env
 Then edit `.env` and fill in your Supabase values:
 
 ```text
-APP_NAME=StudyAI Backend
+APP_NAME=Lumio Backend
 APP_ENV=development
 FRONTEND_URL=http://localhost:8080
 
