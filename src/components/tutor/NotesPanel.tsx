@@ -6,6 +6,7 @@ import {
   File,
   FileText,
   FolderOpen,
+  Trash2,
   Loader2,
   NotebookPen,
   Presentation,
@@ -19,7 +20,7 @@ import { api } from "@/lib/api";
 import { CitationChips } from "@/components/Citations";
 import { MarkdownDocument } from "@/components/notes/MarkdownDocument";
 import { PdfViewer } from "@/components/notes/PdfViewer";
-import { useMaterials, useNotes } from "@/lib/queries";
+import { useDeleteNote, useMaterials, useNotes } from "@/lib/queries";
 import type { MaterialType, Note } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +74,7 @@ export function NotesPanel({
   onOpenMaterial,
 }: NotesPanelProps) {
   const notes = useNotes(courseId);
+  const deleteNote = useDeleteNote(courseId);
   const materials = useMaterials(courseId);
   const [opening, setOpening] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -114,6 +116,17 @@ export function NotesPanel({
       toast.error(err instanceof Error ? err.message : "Could not download the PDF.");
     } finally {
       setDownloadingPdf(false);
+    }
+  };
+
+  const removeNote = async (note: Note) => {
+    if (!window.confirm(`Delete “${note.title}”? This cannot be undone.`)) return;
+    try {
+      await deleteNote.mutateAsync(note.id);
+      if (selectedNoteId === note.id) onBack();
+      toast.success("Note deleted");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete the note.");
     }
   };
 
@@ -270,22 +283,30 @@ export function NotesPanel({
             ) : (
               <ul className="px-2">
                 {noteList.map((n) => (
-                  <li key={n.id}>
+                  <li key={n.id} className="group flex items-center gap-1 rounded-xl pr-1 transition-colors hover:bg-secondary">
                     <button
                       type="button"
                       onClick={() => onSelectNote(n.id)}
                       className={cn(
-                        "flex w-full items-start gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-secondary",
+                        "flex min-w-0 flex-1 items-start gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors",
                         selectedNoteId === n.id && "bg-secondary",
                       )}
                     >
                       <NotebookPen className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{n.title}</span>
-                        <span className="block text-xs text-muted-foreground">
-                          Updated {n.updated}
-                        </span>
+                        <span className="block text-xs text-muted-foreground">Updated {n.updated}</span>
                       </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void removeNote(n)}
+                      disabled={deleteNote.isPending}
+                      className="btn btn-ghost shrink-0 p-2 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50"
+                      aria-label={`Delete ${n.title}`}
+                      title="Delete note"
+                    >
+                      {deleteNote.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                     </button>
                   </li>
                 ))}
