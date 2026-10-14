@@ -2,6 +2,7 @@
 
 The backend for **StudyAI**, an AI-powered study assistant built for an AI/ML hackathon.
 
+**Production deployment:** The live frontend communicates with the deployed backend. Localhost URLs in the setup and testing sections are only for local development. To access the deployed API documentation, open `https://lumio-frontend-njmh.onrender.com` if the hosting configuration exposes the FastAPI docs.
 > **Current status: Phase 1 — Part 2.**
 > Part 1 gave us the foundation (app, config, health check). Part 2 added Supabase,
 > email/password authentication, user profiles, and courses protected by Row Level Security.
