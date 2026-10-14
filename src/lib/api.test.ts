@@ -17,6 +17,7 @@ import {
   toMaterial,
   toNote,
   toTutorAnswer,
+  toTopic,
 } from "./api";
 
 const jsonResponse = (body: unknown, status = 200) =>
@@ -330,6 +331,67 @@ describe("RAG dto mapping", () => {
   });
 });
 
+describe("topics dto mapping", () => {
+  it("maps a generated topic with its provenance", () => {
+    const topic = toTopic({
+      id: "t1",
+      user_id: "u1",
+      course_id: "c1",
+      name: "Graph traversal",
+      description: "BFS and DFS over adjacency lists.",
+      topic_group: "Graphs",
+      prerequisite: "Graph representation",
+      resource_count: 2,
+      source_material_ids: ["m1", "m2"],
+      generated: true,
+      generation_method: "llm",
+      created_at: null,
+      updated_at: "2026-10-12T09:00:00Z",
+    });
+    expect(topic).toEqual({
+      id: "t1",
+      courseId: "c1",
+      name: "Graph traversal",
+      description: "BFS and DFS over adjacency lists.",
+      group: "Graphs",
+      prerequisite: "Graph representation",
+      resources: 2,
+      sourceMaterialIds: ["m1", "m2"],
+      generated: true,
+      generationMethod: "llm",
+      createdAt: undefined,
+      updatedAt: "2026-10-12T09:00:00Z",
+    });
+  });
+
+  it("defaults a topic row without optional fields", () => {
+    const topic = toTopic({
+      id: "t2",
+      user_id: "u1",
+      course_id: "c1",
+      name: "Manual topic",
+      description: null,
+      topic_group: null,
+      prerequisite: null,
+      resource_count: 0,
+      source_material_ids: [],
+      generated: false,
+      generation_method: null,
+      created_at: null,
+      updated_at: null,
+    });
+    expect(topic).toMatchObject({
+      description: undefined,
+      group: undefined,
+      prerequisite: undefined,
+      resources: 0,
+      sourceMaterialIds: [],
+      generated: false,
+      generationMethod: null,
+    });
+  });
+});
+
 describe("RAG api client", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -450,6 +512,164 @@ describe("RAG api client", () => {
     const [requestUrl, init] = fetchMock.mock.calls[0]!;
     expect(requestUrl).toContain("/api/notes/n1/pdf");
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer tok-abc");
+  });
+});
+
+describe("topics api client", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+  afterEach(() => {
+    clearSession();
+    vi.unstubAllGlobals();
+  });
+
+  const topicRow = {
+    id: "t1",
+    user_id: "u1",
+    course_id: "c1",
+    name: "Graph traversal",
+    description: "BFS and DFS over adjacency lists.",
+    topic_group: "Graphs",
+    prerequisite: null,
+    resource_count: 2,
+    source_material_ids: ["m1", "m2"],
+    generated: true,
+    generation_method: "llm",
+    created_at: null,
+    updated_at: "2026-10-12T09:00:00Z",
+  };
+
+  it("lists the course topics with the bearer token attached", async () => {
+    localStorage.setItem("studyai.token", "tok-abc");
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse([topicRow]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const topics = await api.topics.list("c1");
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toContain("/api/courses/c1/topics");
+    expect((init?.headers as Record<string, string>)["Authorization"]).toBe(
+      "Bearer tok-abc",
+    );
+    expect(topics).toHaveLength(1);
+    expect(topics[0]).toMatchObject({
+      id: "t1",
+      courseId: "c1",
+      name: "Graph traversal",
+      description: "BFS and DFS over adjacency lists.",
+      resources: 2,
+      sourceMaterialIds: ["m1", "m2"],
+      generated: true,
+    });
+  });
+
+  it("generates topics with POST and maps the saved rows", async () => {
+    localStorage.setItem("studyai.token", "tok-abc");
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse([topicRow]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const topics = await api.topics.generate("c1");
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toContain("/api/courses/c1/topics/generate");
+    expect(init?.method).toBe("POST");
+    expect(topics[0]?.name).toBe("Graph traversal");
+  });
+
+  it("refreshes topics with POST to the refresh endpoint", async () => {
+    localStorage.setItem("studyai.token", "tok-abc");
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse([topicRow]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const topics = await api.topics.refresh("c1");
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toContain("/api/courses/c1/topics/refresh");
+    expect(init?.method).toBe("POST");
+    expect(topics[0]?.id).toBe("t1");
+  });
+
+  it("fetches one topic by id", async () => {
+    localStorage.setItem("studyai.token", "tok-abc");
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse(topicRow),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const topic = await api.topics.get("t1");
+
+    const [url] = fetchMock.mock.calls[0]!;
+    expect(url).toContain("/api/topics/t1");
+    expect(topic.name).toBe("Graph traversal");
+  });
+
+  it("surfaces the backend's empty-course message on 400", async () => {
+    localStorage.setItem("studyai.token", "tok-abc");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({ detail: "Add materials to this course, then generate topics." }, 400),
+      ),
+    );
+
+    await expect(api.topics.generate("c1")).rejects.toThrow(
+      "Add materials to this course, then generate topics.",
+    );
+  });
+
+  it("surfaces the unindexed-material message on 400", async () => {
+    localStorage.setItem("studyai.token", "tok-abc");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse(
+          {
+            detail:
+              "No indexed content yet — extract your materials and build their index first, then generate topics.",
+          },
+          400,
+        ),
+      ),
+    );
+
+    await expect(api.topics.generate("c1")).rejects.toThrow(
+      "No indexed content yet",
+    );
+  });
+
+  it("surfaces the LLM-not-configured message on 503 without crashing", async () => {
+    localStorage.setItem("studyai.token", "tok-abc");
+    const message =
+      "The language model is not configured, so notes and tutor answers cannot be generated.";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ detail: message }, 503)),
+    );
+
+    await expect(api.topics.refresh("c1")).rejects.toBeInstanceOf(ApiError);
+    await expect(api.topics.refresh("c1")).rejects.toThrow(message);
+  });
+
+  it("surfaces an LLM generation failure on 502", async () => {
+    localStorage.setItem("studyai.token", "tok-abc");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({ detail: "The language model returned no topics." }, 502),
+      ),
+    );
+
+    await expect(api.topics.generate("c1")).rejects.toThrow(
+      "The language model returned no topics.",
+    );
   });
 });
 

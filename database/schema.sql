@@ -111,15 +111,19 @@ create table if not exists public.rag_chunks (
 -- TOPICS: knowledge map entries per course
 -- ------------------------------------------------------------
 create table if not exists public.topics (
-    id                uuid primary key default gen_random_uuid(),
-    user_id           uuid not null references auth.users (id) on delete cascade,
-    course_id         uuid not null references public.courses (id) on delete cascade,
-    name              text not null,
-    topic_group       text,
-    prerequisite      text,
-    resource_count    integer not null default 0,
-    created_at        timestamptz not null default now(),
-    updated_at        timestamptz not null default now()
+    id                  uuid primary key default gen_random_uuid(),
+    user_id             uuid not null references auth.users (id) on delete cascade,
+    course_id           uuid not null references public.courses (id) on delete cascade,
+    name                text not null,
+    description         text,
+    topic_group         text,
+    prerequisite        text,
+    resource_count      integer not null default 0,
+    source_material_ids uuid[] not null default '{}',
+    generated           boolean not null default false,
+    generation_method   text,
+    created_at          timestamptz not null default now(),
+    updated_at          timestamptz not null default now()
 );
 
 -- ------------------------------------------------------------
@@ -260,6 +264,7 @@ create index if not exists courses_user_created_idx     on public.courses (user_
 create index if not exists materials_user_idx           on public.materials (user_id, course_id);
 create index if not exists notes_user_idx               on public.notes (user_id, course_id);
 create index if not exists topics_user_idx              on public.topics (user_id, course_id);
+create unique index if not exists topics_course_name_uidx on public.topics (user_id, course_id, lower(name));
 create index if not exists modules_user_idx             on public.modules (user_id, course_id);
 create index if not exists lessons_user_idx             on public.lessons (user_id, course_id);
 create index if not exists progress_user_idx            on public.learning_progress (user_id, course_id);

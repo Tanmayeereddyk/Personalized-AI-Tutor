@@ -173,6 +173,48 @@ export const useDeleteNote = (courseId: string) => {
 };
 
 // ------------------------------------------------------------------
+// Topics (knowledge map)
+// ------------------------------------------------------------------
+
+export const useTopics = (courseId: string) => {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["topics", user?.id, courseId],
+    queryFn: () => api.topics.list(courseId),
+    enabled: !!user && !!courseId,
+  });
+};
+
+/**
+ * Generate the course's knowledge map from its indexed materials.
+ * The backend refreshes generated topics in place, so this never
+ * duplicates rows. Called only from the Generate button — the
+ * extraction pipeline already refreshes topics automatically.
+ */
+export const useGenerateTopics = (courseId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.topics.generate(courseId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["topics", user?.id, courseId] });
+    },
+  });
+};
+
+/** Re-generate the knowledge map, e.g. after new materials were uploaded. */
+export const useRefreshTopics = (courseId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.topics.refresh(courseId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["topics", user?.id, courseId] });
+    },
+  });
+};
+
+// ------------------------------------------------------------------
 // RAG index (chunks + embeddings) for one material
 // ------------------------------------------------------------------
 
