@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     auth,
     courses,
+    flashcard_generation,
     extraction,
     health,
     learning,
@@ -63,6 +64,7 @@ app.include_router(learning.decks_router)
 app.include_router(learning.events_router)
 app.include_router(learning.bookmarks_router)
 app.include_router(learning.flashcards_router)
+app.include_router(flashcard_generation.router)
 app.include_router(topics.router)
 app.include_router(quizzes.router)
 

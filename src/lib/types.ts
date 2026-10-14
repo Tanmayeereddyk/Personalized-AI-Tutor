@@ -148,13 +148,15 @@ export interface QuizAnswer {
   isCorrect: boolean | null;
 }
 
-export interface FlashcardDeck { id: string; courseId: string; topic: string; cards: number; lastReviewed: string }
+  export interface FlashcardDeck { id: string; courseId: string; name?: string | null; topic: string; cards: number; lastReviewed: string }
 export interface Flashcard {
   id: string;
   deckId: string;
   userId: string;
   front: string;
   back: string;
+    topicId?: string | null;
+    topic?: string | null;
   createdAt: string;
   courseId?: string | undefined;
 }

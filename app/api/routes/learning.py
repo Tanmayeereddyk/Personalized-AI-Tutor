@@ -242,8 +242,14 @@ def _flashcards_router() -> APIRouter:
 
     @router.post(collection, response_model=FlashcardResponse, status_code=201, operation_id='flashcards_create')
     def create_card(deck_id: str, payload: FlashcardCreate, user: AuthUser = Depends(get_current_user), db: Client = Depends(get_service_supabase)):
-        owned_service.ensure_deck_owned(db, user.id, deck_id)
+        deck = owned_service.ensure_deck_owned(db, user.id, deck_id)
         values = payload.model_dump()
+        topic_id = values.get("topic_id")
+        if topic_id:
+            topic = (db.table("topics").select("id,name").eq("id", topic_id).eq("user_id", user.id).eq("course_id", deck["course_id"]).maybe_single().execute().data)
+            if topic is None:
+                raise HTTPException(status_code=422, detail="Flashcard topic must belong to this deck's course")
+            values["topic"] = topic["name"]
         values['deck_id'] = deck_id
         res = owned_service.create_item(db, user.id, 'flashcards', values)
         try:

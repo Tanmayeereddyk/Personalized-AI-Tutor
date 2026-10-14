@@ -20,27 +20,37 @@ import {
   useFlashcardDecks,
   useFlashcards,
   useUpdateFlashcard,
+  useGenerateFlashcardDeck,
+  useTopics,
 } from "@/lib/queries";
 import type { Flashcard } from "@/lib/types";
 import { EmptyState, Modal, PageHeader, ProgressBar } from "@/components/ui/kit";
 import { Field } from "@/components/practice/Builder";
 import { MathText } from "@/components/math/MathText";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/courses/$courseId/flashcards")({
   component: Flashcards,
 });
 
-const blankDeck = { topic: "", card_count: "0" };
+const blankDeck = { name: "", topic: "", card_count: "0" };
 const blankCard = { front: "", back: "" };
 
 function Flashcards() {
   const { courseId } = Route.useParams();
   const decks = useFlashcardDecks(courseId);
   const create = useCreateDeck(courseId);
+  const generate = useGenerateFlashcardDeck(courseId);
+  const topics = useTopics(courseId);
   const list = decks.data ?? [];
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(blankDeck);
+  const [mode, setMode] = useState<"ai" | "manual">("ai");
+  const [topicIds, setTopicIds] = useState<string[]>([]);
+  const [cardsPerTopic, setCardsPerTopic] = useState("5");
+  const [difficulty, setDifficulty] = useState<"Easy" | "Medium" | "Hard">("Medium");
+  const [manualCards, setManualCards] = useState([{ ...blankCard }]);
   const [deck, setDeck] = useState<{ id: string; topic: string } | null>(null);
 
   const openDeck = (id: string, topic: string) => setDeck({ id, topic });
@@ -48,13 +58,23 @@ function Flashcards() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await create.mutateAsync({
-        topic: form.topic.trim() || "General",
-        card_count: Math.max(0, Number(form.card_count) || 0),
-      });
-      toast.success("Flashcard deck created.");
+      const name = form.name.trim();
+      if (!name) { toast.error("Deck Name is required."); return; }
+      if (mode === "ai") {
+        if (!topicIds.length) { toast.error("Select at least one topic."); return; }
+        const result = await generate.mutateAsync({ deck_name: name, topic_ids: topicIds, cards_per_topic: Math.max(1, Number(cardsPerTopic) || 5), difficulty });
+        toast.success(result.message || "AI flashcard deck created.");
+      } else {
+        const valid = manualCards.filter((card) => card.front.trim() && card.back.trim());
+        if (!valid.length) { toast.error("Add at least one question and answer."); return; }
+        const created = await create.mutateAsync({ name, topic: form.topic.trim() || "General", card_count: 0 });
+        for (const card of valid) await api.flashcards.create(created.id, { front: card.front.trim(), back: card.back.trim() });
+        toast.success("Flashcard deck created.");
+      }
       setForm(blankDeck);
+      setManualCards([{ ...blankCard }]); setTopicIds([]);
       setOpen(false);
+      await decks.refetch();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not create the deck.");
     }
@@ -109,13 +129,13 @@ function Flashcards() {
               key={d.id}
               className="group relative fade-up text-left"
               style={{ animationDelay: `${i * 50}ms` }}
-              onClick={() => openDeck(d.id, d.topic)}
+              onClick={() => openDeck(d.id, d.name || d.topic)}
             >
               <div className="card absolute inset-0 translate-x-2 translate-y-2 opacity-40 transition group-hover:translate-x-3 group-hover:translate-y-3" />
               <div className="card absolute inset-0 translate-x-1 translate-y-1 opacity-70 transition group-hover:translate-x-1.5 group-hover:translate-y-1.5" />
               <div className="card relative flex flex-col p-5">
                 <Layers className="h-5 w-5 text-primary" />
-                <h3 className="mt-4 text-lg font-medium">{d.topic}</h3>
+                <h3 className="mt-4 text-lg font-medium">{d.name || d.topic}</h3>
                 <div className="mt-1 text-sm text-muted-foreground">{d.cards} cards</div>
                 <div className="mt-4 text-xs text-muted-foreground">
                   Last reviewed: {d.lastReviewed}
@@ -130,38 +150,36 @@ function Flashcards() {
         open={open}
         onOpenChange={setOpen}
         title="Create Flashcards"
-        description="Add a deck for a topic in this course."
+        description="Choose AI generation from course topics or create cards yourself."
       >
         <form onSubmit={submit} className="space-y-4">
-          <Field label="Topic">
+          <Field label="Deck Name">
             <input
               className="field"
-              value={form.topic}
-              onChange={(e) => setForm({ ...form, topic: e.target.value })}
-              placeholder="e.g. Graph Theory"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Enter your deck name"
               autoFocus
             />
           </Field>
-          <Field label="Number of cards (optional)">
-            <input
-              type="number"
-              min={0}
-              className="field"
-              value={form.card_count}
-              onChange={(e) => setForm({ ...form, card_count: e.target.value })}
-            />
-          </Field>
+          <div className="grid grid-cols-2 gap-2">
+            {(["ai", "manual"] as const).map((value) => <button key={value} type="button" onClick={() => setMode(value)} className={cn("rounded-lg border p-3 text-left text-sm", mode === value && "border-primary bg-primary/5")}><strong>{value === "ai" ? "Generate with AI" : "Create Manually"}</strong><span className="mt-1 block text-muted-foreground">{value === "ai" ? "Use selected course topics." : "Write your own cards."}</span></button>)}
+          </div>
+          {mode === "ai" ? <>
+            <Field label="Topics"><div className="max-h-40 space-y-2 overflow-auto rounded-md border p-3">{topics.isLoading ? "Loading topics..." : (topics.data ?? []).map((topic) => <label key={topic.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={topicIds.includes(topic.id)} onChange={() => setTopicIds((ids) => ids.includes(topic.id) ? ids.filter((id) => id !== topic.id) : [...ids, topic.id])} />{topic.name}</label>)}{!topics.isLoading && !(topics.data ?? []).length && <span className="text-muted-foreground">No course topics are available yet.</span>}</div></Field>
+            <div className="grid grid-cols-2 gap-3"><Field label="Cards per topic"><input type="number" min={1} max={30} className="field" value={cardsPerTopic} onChange={(e) => setCardsPerTopic(e.target.value)} /></Field><Field label="Difficulty"><select className="field" value={difficulty} onChange={(e) => setDifficulty(e.target.value as typeof difficulty)}>{["Easy", "Medium", "Hard"].map((value) => <option key={value}>{value}</option>)}</select></Field></div>
+          </> : <><Field label="Topic (optional)"><input className="field" value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })} placeholder="e.g. Chapter 1" /></Field>{manualCards.map((card, i) => <div key={i} className="space-y-2 rounded-md border p-3"><textarea className="field min-h-18" placeholder="Question" value={card.front} onChange={(e) => setManualCards((cards) => cards.map((item, index) => index === i ? { ...item, front: e.target.value } : item))} /><textarea className="field min-h-18" placeholder="Answer" value={card.back} onChange={(e) => setManualCards((cards) => cards.map((item, index) => index === i ? { ...item, back: e.target.value } : item))} /></div>)}<button type="button" className="btn btn-ghost" onClick={() => setManualCards((cards) => [...cards, { ...blankCard }])}>Add another card</button></>}
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
               className="btn btn-ghost"
               onClick={() => setOpen(false)}
-              disabled={create.isPending}
+              disabled={create.isPending || generate.isPending}
             >
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={create.isPending}>
-              {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}Create deck
+            <button type="submit" className="btn btn-primary" disabled={create.isPending || generate.isPending}>
+              {(create.isPending || generate.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}{mode === "ai" ? "Generate Flashcards" : "Save deck"}
             </button>
           </div>
         </form>
@@ -468,7 +486,7 @@ function StudyCard({
       >
         <div className="card absolute inset-0 flex flex-col overflow-hidden p-6 [backface-visibility:hidden]">
           <div className="flex items-center justify-between text-xs uppercase tracking-wider text-muted-foreground">
-            <span>Question</span>
+            <span>{card.topic ? `${card.topic} · Question` : "Question"}</span>
             <RotateCw className="h-3.5 w-3.5" />
           </div>
           <div className="mt-5 flex-1 overflow-y-auto whitespace-pre-wrap break-words text-xl font-medium leading-snug">

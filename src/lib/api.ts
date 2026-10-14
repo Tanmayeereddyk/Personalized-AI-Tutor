@@ -490,6 +490,7 @@ interface DeckDto {
   id: string;
   user_id: string;
   course_id: string;
+  name: string | null;
   topic: string;
   card_count: number;
   created_at: string | null;
@@ -502,6 +503,8 @@ interface FlashcardDto {
   deck_id: string;
   front: string;
   back: string;
+  topic_id?: string | null;
+  topic?: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -754,6 +757,7 @@ export const toTopic = (dto: TopicDto): Topic => ({
 export const toDeck = (dto: DeckDto): FlashcardDeck => ({
   id: dto.id,
   courseId: dto.course_id,
+  name: dto.name,
   topic: dto.topic,
   cards: dto.card_count,
   lastReviewed: friendlyDate(dto.updated_at),
@@ -765,6 +769,8 @@ export const toFlashcard = (dto: FlashcardDto): Flashcard => ({
   userId: dto.user_id,
   front: dto.front,
   back: dto.back,
+  topicId: dto.topic_id,
+  topic: dto.topic,
   createdAt: dto.created_at ?? "",
   courseId: undefined,
 });
@@ -1186,7 +1192,7 @@ export const api = {
     },
     async create(
       courseId: string,
-      input: { topic: string; card_count?: number },
+      input: { topic: string; name?: string; card_count?: number },
     ): Promise<FlashcardDeck> {
       return toDeck(
         await request<DeckDto>(`/api/courses/${courseId}/flashcard-decks`, {
@@ -1194,6 +1200,9 @@ export const api = {
           body: input,
         }),
       );
+    },
+    async generate(courseId: string, input: { deck_name: string; topic_ids: string[]; cards_per_topic: number; difficulty: "Easy" | "Medium" | "Hard" }) {
+      return request<{ deck: DeckDto; cards: FlashcardDto[]; topics: { topic_id: string; topic: string; requested: number; generated: number; message?: string | null }[]; message?: string | null }>(`/api/courses/${courseId}/flashcard-decks/generate`, { method: "POST", body: input });
     },
   },
   flashcards: {

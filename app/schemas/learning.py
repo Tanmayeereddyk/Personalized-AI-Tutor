@@ -85,6 +85,7 @@ class QuizResponse(BaseModel):
 # FLASHCARD DECKS
 # ------------------------------------------------------------------
 class DeckCreate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=300)
     topic: str = Field(default="General", max_length=200)
     card_count: int = Field(default=0, ge=0)
 
@@ -98,6 +99,7 @@ class DeckResponse(BaseModel):
     id: str
     user_id: str
     course_id: str
+    name: str | None = None
     topic: str = "General"
     card_count: int = 0
     created_at: str | None = None
@@ -175,6 +177,8 @@ class BookmarkResponse(BaseModel):
 class FlashcardCreate(BaseModel):
     front: str = Field(min_length=1, max_length=4000)
     back: str = Field(min_length=1, max_length=4000)
+    topic_id: str | None = None
+    topic: str | None = Field(default=None, max_length=200)
 
 
 class FlashcardUpdate(BaseModel):
@@ -188,4 +192,6 @@ class FlashcardResponse(BaseModel):
     deck_id: str
     front: str
     back: str
+    topic_id: str | None = None
+    topic: str | None = None
     created_at: str | None = None
