@@ -62,6 +62,21 @@ logger = logging.getLogger("studyai.notes")
 
 _CITATION_MARKER = re.compile(r"\[#(\d+)\]")
 _H1_LINE = re.compile(r"^#\s+.*$", re.MULTILINE)
+_LOCATION_HEADING_PREFIX = re.compile(
+    r"^(?P<marks>#{1,6}\s*)?(?:slide|page)\s+\d+"
+    r"(?:\s+of\s+\d+)?\s*[:|–—-]\s*",
+    re.IGNORECASE,
+)
+_STANDALONE_LOCATION = re.compile(
+    r"^\s*(?:[-*+]\s*)?(?:slide|page)\s+\d+(?:\s+of\s+\d+)?\s*[.!:]?\s*$",
+    re.IGNORECASE,
+)
+_TRAILING_LOCATION = re.compile(
+    r"(?:\s*(?:\||[-–—])\s*|\s+)(?:\[(?:slide|page)\s+\d+(?:\s+of\s+\d+)?\]"
+    r"|\((?:slide|page)\s+\d+(?:\s+of\s+\d+)?\)"
+    r"|(?:slide|page)\s+\d+(?:\s+of\s+\d+)?)\s*[.!]?$",
+    re.IGNORECASE,
+)
 
 _NOTES_SYSTEM_PROMPT = (
     "You are an expert study-notes author. You turn source passages into accurate, "
@@ -119,23 +134,78 @@ def _scope_title(materials: dict[str, dict], single_material_id: str | None) -> 
     return "Course Notes"
 
 
-def _append_sources(lines: list[str], used: list[dict], materials: dict[str, dict]) -> None:
-    """Append a de-duplicated 'Sources' list pointing at real chunks."""
-    seen: set[tuple] = set()
-    entries: list[str] = []
-    for chunk in used:
-        key = (chunk.get("material_id"), citations.chunk_locator(chunk))
-        if key in seen:
+def clean_generated_notes(markdown: str) -> str:
+    """Remove extraction/source-position noise while retaining learning content.
+
+    Only explicit slide/page labels (heading prefixes, standalone labels, or
+    delimited trailing labels) are treated as source positions. Numbers elsewhere
+    are left untouched because they may be formulas, dates, examples, or steps.
+    """
+    # Older generation appended a final material list. Drop that metadata block
+    # when an existing generated note is regenerated.
+    source_lines = markdown.splitlines()
+    source_heading = re.compile(r"^\s*#{1,6}\s+sources\s*$", re.IGNORECASE)
+    source_index = next(
+        (i for i in range(len(source_lines) - 1, -1, -1) if source_heading.match(source_lines[i])),
+        None,
+    )
+    if source_index is not None:
+        if all(
+            not line.strip() or re.match(r"^\s*[-*+]\s+", line)
+            for line in source_lines[source_index + 1:]
+        ):
+            markdown = "\n".join(source_lines[:source_index])
+
+    cleaned: list[str] = []
+    seen_headings: set[str] = set()
+    previous_content_line: str | None = None
+    in_fence = False
+
+    for original in markdown.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        line = original.rstrip()
+        if re.match(r"^\s*(```|~~~)", line):
+            in_fence = not in_fence
+            cleaned.append(line)
+            previous_content_line = line
             continue
-        seen.add(key)
-        entries.append(
-            f"- {_material_name(materials, chunk.get('material_id'))} · "
-            f"{citations.chunk_locator(chunk)}"
-        )
-    if entries:
-        lines.append("")
-        lines.append("## Sources")
-        lines.extend(entries)
+
+        if not in_fence:
+            if _STANDALONE_LOCATION.match(line):
+                continue
+
+            # Source labels are removed only when they head a Markdown heading
+            # or a line of content, followed by a clear separator.
+            line = _LOCATION_HEADING_PREFIX.sub(lambda m: m.group("marks") or "", line)
+
+            # Remove a trailing, explicitly delimited location label. Avoid
+            # touching inline educational references such as "see page 3".
+            line = _TRAILING_LOCATION.sub("", line).rstrip()
+
+            if not line.strip():
+                if cleaned and cleaned[-1] != "":
+                    cleaned.append("")
+                previous_content_line = None
+                continue
+
+            # Extraction often repeats the same slide title at boundaries.
+            if line.lstrip().startswith("#"):
+                key = re.sub(r"\s+", " ", line.strip()).casefold()
+                if key in seen_headings:
+                    continue
+                seen_headings.add(key)
+
+            # Collapse directly repeated extracted lines, but never normalize
+            # numbers or wording in distinct lines/paragraphs.
+            key = re.sub(r"\s+", " ", line.strip()).casefold()
+            if previous_content_line == key:
+                continue
+            previous_content_line = key
+        else:
+            previous_content_line = None
+
+        cleaned.append(line)
+
+    return "\n".join(cleaned).strip() + "\n"
 
 
 def _indexable_unit_count(client: Client, user_id: str, scope: list[str]) -> int:
@@ -358,9 +428,7 @@ def _generate_with_llm(
         "drawn from the cited passages._\n\n"
         f"{body}\n"
     )
-    lines = [content.rstrip("\n")]
-    _append_sources(lines, used, materials)
-    return title, "\n".join(lines).rstrip("\n") + "\n", sorted(referenced), used
+    return title, clean_generated_notes(content), sorted(referenced), used
 
 
 def _find_existing_generated_note(

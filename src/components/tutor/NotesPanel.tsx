@@ -17,7 +17,6 @@ import {
 import { toast } from "sonner";
 
 import { api } from "@/lib/api";
-import { CitationChips } from "@/components/Citations";
 import { MarkdownDocument } from "@/components/notes/MarkdownDocument";
 import { PdfViewer } from "@/components/notes/PdfViewer";
 import { useDeleteNote, useMaterials, useNotes } from "@/lib/queries";
@@ -61,6 +60,22 @@ function SectionLabel({ children }: { children: ReactNode }) {
       {children}
     </div>
   );
+}
+
+function hideGeneratedSourcesSection(markdown: string): string {
+  const lines = markdown.split("\n");
+  let sourcesIndex = -1;
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (line && /^#{1,6}\s+sources\s*$/i.test(line.trim())) {
+      sourcesIndex = index;
+      break;
+    }
+  }
+  if (sourcesIndex < 0) return markdown;
+  const trailingLines = lines.slice(sourcesIndex + 1);
+  if (!trailingLines.every((line) => !line.trim() || /^\s*[-*+]\s+/.test(line))) return markdown;
+  return lines.slice(0, sourcesIndex).join("\n").trimEnd();
 }
 
 export function NotesPanel({
@@ -242,19 +257,13 @@ export function NotesPanel({
             </div>
             {selected.content ? (
               <div className="rounded-2xl border bg-card px-5 py-6 shadow-sm">
-                <MarkdownDocument markdown={selected.content} />
+                <MarkdownDocument
+                  markdown={selected.generated ? hideGeneratedSourcesSection(selected.content) : selected.content}
+                />
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">This note has no content saved yet.</p>
             )}
-            {selected.sourceRefs && selected.sourceRefs.length > 0 ? (
-              <div className="mt-4">
-                <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Sources
-                </div>
-                <CitationChips citations={selected.sourceRefs} />
-              </div>
-            ) : null}
           </div>
         ) : (
           <div className="pb-4">
