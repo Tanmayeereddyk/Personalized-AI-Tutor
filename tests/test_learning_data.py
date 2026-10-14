@@ -178,6 +178,29 @@ def test_course_scoped_crud(client, logged_in_user, segment, body) -> None:
     assert client.get(f"/api/{segment}/{item['id']}", headers=headers).status_code == 404
 
 
+def test_quiz_list_preserves_null_percentage_and_source(
+    client, fake_supabase, logged_in_user
+) -> None:
+    _, headers = logged_in_user
+    course_id = _course(client, headers)
+    quiz = client.post(
+        f"/api/courses/{course_id}/quizzes",
+        json={"name": "Legacy quiz"},
+        headers=headers,
+    ).json()
+    # Simulate an existing row returned by Supabase with nullable legacy data.
+    stored = next(row for row in fake_supabase.tables["quizzes"] if row["id"] == quiz["id"])
+    stored["percentage"] = None
+    stored["source"] = None
+
+    response = client.get(f"/api/courses/{course_id}/quizzes", headers=headers)
+
+    assert response.status_code == 200, response.text
+    listed = next(row for row in response.json() if row["id"] == quiz["id"])
+    assert listed["percentage"] is None
+    assert listed["source"] is None
+
+
 @pytest.mark.parametrize(("segment", "body"), COURSE_SCOPED)
 def test_cannot_touch_another_users_course_scoped_item(
     client, fake_supabase, logged_in_user, segment, body

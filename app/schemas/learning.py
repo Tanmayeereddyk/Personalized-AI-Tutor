@@ -71,10 +71,12 @@ class QuizResponse(BaseModel):
     difficulty: str = "Medium"
     score: int = 0
     total: int = 0
-    percentage: int = 0
+    # Legacy or externally written rows may not have a recorded score.
+    percentage: int | None = None
     quiz_set_id: str | None = None
     scope_label: str | None = None
-    source: str = "manual"
+    # Null means the attempt's provenance was not recorded.
+    source: str | None = None
     submitted_at: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
