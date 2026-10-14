@@ -6,6 +6,8 @@ import { useCourse, useStore } from "@/lib/store";
 import { CourseBadge } from "@/components/ui/kit";
 import { EditCourseModal } from "@/components/courses/AddCourseModal";
 import { cn } from "@/lib/utils";
+import { useQuizzes } from "@/lib/queries";
+import { calculateMastery } from "@/lib/mastery";
 
 export const Route = createFileRoute("/courses/$courseId")({
   head: ({ params }) => ({
@@ -37,6 +39,8 @@ const tabs = [
 function CourseLayout() {
   const { courseId } = Route.useParams();
   const course = useCourse(courseId);
+  const quizzes = useQuizzes(courseId);
+  const mastery = calculateMastery(quizzes.data ?? [], courseId);
   const { coursesLoading, removeCourse, reloadCourses } = useStore();
   const navigate = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
@@ -102,7 +106,13 @@ function CourseLayout() {
             <div className="flex items-center gap-2">
               <span className="chip font-mono">{course.code}</span>
               <span className="text-sm text-muted-foreground">
-                {course.mastery}% overall mastery
+                {quizzes.isLoading
+                  ? "Loading mastery…"
+                  : quizzes.isError
+                    ? "Mastery unavailable"
+                    : mastery
+                      ? `${mastery.percent}% overall mastery`
+                      : "Not attempted"}
               </span>
             </div>
             <h1 className="mt-1.5 text-2xl font-semibold tracking-tight sm:text-3xl">

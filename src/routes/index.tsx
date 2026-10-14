@@ -5,6 +5,8 @@ import { Greeting } from "@/components/dashboard/Greeting";
 import { CourseCard, AddCourseCard } from "@/components/courses/CourseCard";
 import { CourseBadge, EmptyState, ProgressBar } from "@/components/ui/kit";
 import { useEvents, sortEvents, todayKey, formatTime } from "@/lib/events";
+import { useQuizzes } from "@/lib/queries";
+import { calculateMastery } from "@/lib/mastery";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -23,6 +25,8 @@ function Dashboard() {
   const { events } = useEvents();
   const upcoming = events.filter((e) => e.date >= todayKey()).sort(sortEvents).slice(0, 4);
   const resume = courses.find((c) => c.currentTopic) ?? courses[0];
+  const resumeQuizzes = useQuizzes(resume?.id ?? "");
+  const resumeMastery = resume ? calculateMastery(resumeQuizzes.data ?? [], resume.id) : null;
 
   return (
     <div className="space-y-10">
@@ -46,9 +50,17 @@ function Dashboard() {
                   <div className="mt-1 font-medium">{resume.currentTopic ?? "—"}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Mastery</div>
-                  <div className="mt-1 font-mono font-medium">{resume.mastery}%</div>
-                  <ProgressBar value={resume.mastery} className="mt-2" />
+                  <div className="text-xs text-muted-foreground">Overall mastery</div>
+                  <div className="mt-1 font-mono font-medium">
+                    {resumeQuizzes.isLoading
+                      ? "Loading…"
+                      : resumeQuizzes.isError
+                        ? "Unavailable"
+                        : resumeMastery
+                          ? `${resumeMastery.percent}%`
+                          : "Not attempted"}
+                  </div>
+                  <ProgressBar value={resumeMastery?.percent ?? 0} className="mt-2" />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5" />Last studied</div>

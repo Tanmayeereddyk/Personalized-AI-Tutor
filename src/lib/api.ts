@@ -447,6 +447,7 @@ interface QuizDto {
   created_at: string | null;
   updated_at: string | null;
   answers?: { question_id: string; topic_id: string | null; answered: boolean; is_correct: boolean | null }[] | Record<string, string>;
+  results?: { id: string; given: string; correct: boolean }[];
 }
 
 interface QuizQuestionSourceDto {
@@ -743,6 +744,11 @@ export const toQuiz = (dto: QuizDto): Quiz => ({
     topicId: answer.topic_id,
     answered: answer.answered,
     isCorrect: answer.is_correct,
+  })) : undefined,
+  results: Array.isArray(dto.results) ? dto.results.map((result) => ({
+    id: result.id,
+    given: result.given,
+    correct: result.correct,
   })) : undefined,
 });
 

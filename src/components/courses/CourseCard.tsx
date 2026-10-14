@@ -8,7 +8,7 @@ import { calculateMastery } from "@/lib/mastery";
 
 export function CourseCard({ course, index = 0 }: { course: Course; index?: number }) {
   const quizzes = useQuizzes(course.id);
-  const mastery = calculateMastery(quizzes.data ?? []);
+  const mastery = calculateMastery(quizzes.data ?? [], course.id);
   return (
     <Link
       to="/courses/$courseId" params={{ courseId: course.id }}
@@ -22,7 +22,15 @@ export function CourseCard({ course, index = 0 }: { course: Course; index?: numb
       <h3 className="mt-5 line-clamp-2 min-h-[2.75rem] font-medium leading-snug">{course.name}</h3>
       <div className="mt-5 flex items-baseline justify-between text-sm">
         <span className="text-muted-foreground">Overall mastery</span>
-        <span className="font-mono font-medium">{mastery ? `${mastery.percent}%` : "Not attempted"}</span>
+        <span className="font-mono font-medium">
+          {quizzes.isLoading
+            ? "Loading…"
+            : quizzes.isError
+              ? "Unavailable"
+              : mastery
+                ? `${mastery.percent}%`
+                : "Not attempted"}
+        </span>
       </div>
       <ProgressBar value={mastery?.percent ?? 0} tone={mastery ? masteryTone(mastery.percent) : "primary"} className="mt-2" />
       <div className="mt-4 text-xs text-muted-foreground">{course.topicCount} topics · {course.materialCount} materials</div>

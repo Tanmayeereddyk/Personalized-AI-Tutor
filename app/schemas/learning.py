@@ -82,6 +82,9 @@ class QuizResponse(BaseModel):
     # AI submissions store question_id -> submitted answer; manually logged
     # attempts may store validated per-question answer details.
     answers: dict[str, str] | list[QuizAnswer] = Field(default_factory=dict)
+    # Generated attempts store graded answer detail here; the list endpoint
+    # exposes it so the frontend can calculate mastery without another query.
+    results: list[dict] = Field(default_factory=list)
     percentage: int | None = None
     quiz_set_id: str | None = None
     scope_label: str | None = None

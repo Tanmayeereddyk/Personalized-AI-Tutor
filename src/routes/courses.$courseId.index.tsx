@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { BookOpen, FolderOpen, Loader2, Network } from "lucide-react";
 import { useCourse } from "@/lib/store";
-import { useMaterials, useTopics } from "@/lib/queries";
-import { EmptyState } from "@/components/ui/kit";
+import { useMaterials, useQuizzes, useTopics } from "@/lib/queries";
+import { EmptyState, ProgressBar, masteryTone } from "@/components/ui/kit";
 import { TutorAside } from "@/components/study/TutorAside";
+import { calculateMastery } from "@/lib/mastery";
 
 export const Route = createFileRoute("/courses/$courseId/")({
   component: Overview,
@@ -13,7 +14,9 @@ function Overview() {
   const { courseId } = Route.useParams();
   const course = useCourse(courseId);
   const materials = useMaterials(courseId);
+  const quizzes = useQuizzes(courseId);
   const topics = useTopics(courseId);
+  const mastery = calculateMastery(quizzes.data ?? [], courseId);
   if (!course) return null;
 
   const count = materials.data?.length ?? 0;
@@ -38,10 +41,27 @@ function Overview() {
               Manage materials
             </Link>
           </div>
+          <div className="card p-6">
+            <div className="text-sm font-medium">Overall mastery</div>
+            <div className="mt-4 font-mono text-4xl font-semibold">
+              {quizzes.isLoading
+                ? "…"
+                : quizzes.isError
+                  ? "Unavailable"
+                  : mastery
+                    ? `${mastery.percent}%`
+                    : "Not attempted"}
+            </div>
+            <ProgressBar
+              value={mastery?.percent ?? 0}
+              tone={mastery ? masteryTone(mastery.percent) : "primary"}
+              className="mt-3"
+            />
+          </div>
         </div>
 
         <div className="card p-6">
-          <div className="text-sm font-medium">Topic mastery</div>
+          <div className="text-sm font-medium">Course topics</div>
           {topics.isLoading ? (
             <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
