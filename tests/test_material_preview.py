@@ -301,6 +301,35 @@ def test_preview_failure_is_explained_and_download_survives(
     assert url.status_code == 200, url.text
 
 
+def test_oversized_office_file_skips_conversion_and_uses_fallback(
+    client, fake_supabase, monkeypatch
+) -> None:
+    headers = _signup(client, "largepreview@example.com")
+    course = _create_course(client, headers)
+    user_id = _user_id(client, headers)
+    material_id = _seed_material(
+        fake_supabase, user_id, course["id"], "large.pptx", PPTX_BYTES
+    )
+    row = next(row for row in fake_supabase.tables["materials"] if row["id"] == material_id)
+    row["size_bytes"] = preview_service.MAX_PREVIEW_SOURCE_BYTES + 1
+    _seed_slide_unit(fake_supabase, material_id, 1, "Large deck fallback", 10)
+
+    monkeypatch.setattr(preview_service, "find_soffice", lambda: "soffice")
+    monkeypatch.setattr(
+        preview_service,
+        "convert_to_pdf",
+        lambda *_args: pytest.fail("oversized source must not reach conversion"),
+    )
+
+    client.post(f"/api/materials/{material_id}/preview", headers=headers)
+    response = client.get(f"/api/materials/{material_id}/preview", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    assert response.json()["mode"] == "slides"
+    assert "100 MB" in response.json()["message"]
+
+
 # ----------------------------------------------------------------------
 # Guard rails
 # ----------------------------------------------------------------------
@@ -344,6 +373,29 @@ def test_preview_is_private_to_the_owner(client, fake_supabase) -> None:
         client.post(f"/api/materials/{material_id}/preview", headers=stranger).status_code
         == 404
     )
+
+
+def test_original_pdf_link_is_authenticated_and_owner_only(client, fake_supabase) -> None:
+    owner = _signup(client, "pdfowner@example.com")
+    course = _create_course(client, owner)
+    owner_id = _user_id(client, owner)
+    material_id = _seed_material(
+        fake_supabase,
+        owner_id,
+        course["id"],
+        "original.pdf",
+        b"%PDF-1.4 original",
+        material_type="pdf",
+        mime="application/pdf",
+    )
+
+    owner_link = client.get(f"/api/materials/{material_id}/url", headers=owner)
+    assert owner_link.status_code == 200
+    assert "token=" in owner_link.json()["url"]
+
+    stranger = _signup(client, "pdfstranger@example.com")
+    assert client.get(f"/api/materials/{material_id}/url", headers=stranger).status_code == 404
+    assert client.get(f"/api/materials/{material_id}/url").status_code == 401
 
 
 def test_preview_does_not_change_material_processing_status(

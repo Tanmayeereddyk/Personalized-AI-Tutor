@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { FileWarning, Loader2, Presentation } from "lucide-react";
 
 import { useMaterialPreview, useStartMaterialPreview } from "@/lib/queries";
 import type { Material } from "@/lib/types";
+import { PdfViewer } from "@/components/materials/PdfViewer";
 
 /**
  * Inline preview for a material.
@@ -22,6 +23,7 @@ import type { Material } from "@/lib/types";
  * Open-in-new-tab for it.
  */
 export function PreviewPane({ material }: { material: Material }) {
+  const [showExtracted, setShowExtracted] = useState(false);
   const start = useStartMaterialPreview(material.id);
   const preview = useMaterialPreview(material.id, isPreviewable(material));
   const { mutate } = start;
@@ -29,8 +31,9 @@ export function PreviewPane({ material }: { material: Material }) {
   // Kicking off the conversion is safe to repeat: the endpoint is
   // idempotent and never converts an already-converted material.
   useEffect(() => {
-    mutate();
-  }, [mutate, material.id]);
+    if (isPreviewable(material)) mutate();
+  }, [mutate, material.id, material.type, material.mimeType]);
+  useEffect(() => setShowExtracted(false), [material.id]);
 
   const data = preview.data;
   const status = data?.status ?? (start.isPending ? "processing" : "none");
@@ -49,11 +52,19 @@ export function PreviewPane({ material }: { material: Material }) {
   // A converted PDF — rendered with the same viewer as uploaded PDFs.
   if (data.mode === "pdf" && data.url) {
     return (
-      <iframe
-        src={data.url}
-        title={material.name}
-        className="h-full w-full"
-      />
+      <div className="flex h-full min-h-0 w-full flex-col">
+        {(data.text || data.slides.length > 0) ? (
+          <div className="flex shrink-0 gap-1 border-b bg-card px-3 py-1.5">
+            <button type="button" className={`btn px-3 py-1 text-xs ${showExtracted ? "btn-ghost" : "btn-primary"}`} onClick={() => setShowExtracted(false)}>
+              PDF preview
+            </button>
+            <button type="button" className={`btn px-3 py-1 text-xs ${showExtracted ? "btn-primary" : "btn-ghost"}`} onClick={() => setShowExtracted(true)}>
+              Extracted text
+            </button>
+          </div>
+        ) : null}
+        {showExtracted ? renderExtracted(data) : <PdfViewer src={data.url} title={material.name} />}
+      </div>
     );
   }
 
@@ -117,7 +128,26 @@ export function PreviewPane({ material }: { material: Material }) {
   );
 }
 
+function renderExtracted(data: NonNullable<ReturnType<typeof useMaterialPreview>["data"]>) {
+  if (data.slides.length > 0) {
+    return (
+      <div className="min-h-0 flex-1 overflow-auto">
+        <ol className="flex flex-col gap-4 p-4">
+          {data.slides.map((slide) => (
+            <li key={slide.number} className="overflow-hidden rounded-xl border bg-card">
+              <div className="border-b px-3 py-1.5 text-xs text-muted-foreground">Slide {slide.number}</div>
+              <p className="whitespace-pre-wrap px-3 py-3 text-sm">{slide.text || "(no text on this slide)"}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    );
+  }
+  return <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-4 font-sans text-sm">{data.text}</pre>;
+}
+
 function isPreviewable(material: Material): boolean {
+  if (material.mimeType?.startsWith("image/")) return false;
   return material.type === "ppt" || material.type === "doc";
 }
 

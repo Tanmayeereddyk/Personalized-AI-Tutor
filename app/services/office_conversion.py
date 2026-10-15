@@ -29,6 +29,7 @@ class OfficeConversionError(Exception):
 # A large deck or document can take a while; allow a generous ceiling
 # without hanging a worker forever.
 _CONVERSION_TIMEOUT_SECONDS = 240.0
+_MAX_CONVERSION_BYTES = 100 * 1024 * 1024
 
 
 def find_soffice() -> str | None:
@@ -91,6 +92,11 @@ def convert_to(
     ``docx`` or ``txt``. The converted file's bytes are returned; the
     temporary working directory is always cleaned up.
     """
+    if len(content) > _MAX_CONVERSION_BYTES:
+        raise OfficeConversionError(
+            "The file exceeds the 100 MB limit for server-side Office conversion."
+        )
+
     workdir = tempfile.mkdtemp(prefix="lumio-office-")
     try:
         safe_name = Path(filename).name or "document"
@@ -138,6 +144,12 @@ def convert_to(
             output = (completed.stderr or completed.stdout or "").strip().splitlines()
             hint = output[-1] if output else f"LibreOffice did not produce a {target_format}."
             raise OfficeConversionError(f"Conversion failed ({hint}).")
+
+        oversized = [path for path in produced if path.stat().st_size > _MAX_CONVERSION_BYTES]
+        if oversized:
+            raise OfficeConversionError(
+                "The converted file exceeds the 100 MB inline preview limit."
+            )
 
         wanted = "." + target_format.split(":")[0].lower()
         matching = [path for path in produced if path.suffix.lower() == wanted]

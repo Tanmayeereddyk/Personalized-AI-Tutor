@@ -93,15 +93,30 @@ describe("PreviewPane", () => {
       mode: "pdf",
       url: "https://files.example.com/preview.pdf?token=test",
       slides: [],
-      text: null,
+      text: "Extracted page text",
       message: null,
     });
     render(<PreviewPane material={pptx} />);
+    expect(screen.getByRole("button", { name: "Extracted text" })).toBeTruthy();
     const iframe = document.querySelector("iframe");
     expect(iframe).not.toBeNull();
-    expect(iframe?.getAttribute("src")).toBe(
-      "https://files.example.com/preview.pdf?token=test",
-    );
+    expect(iframe?.getAttribute("src")).toContain("https://files.example.com/preview.pdf?token=test#toolbar=1");
+    expect(screen.getByRole("button", { name: "View PDF fullscreen" })).toBeTruthy();
+  });
+
+  it("keeps extracted text available beside the converted PDF", async () => {
+    setPreview({
+      status: "ready",
+      mode: "pdf",
+      url: "https://files.example.com/preview.pdf?token=test",
+      slides: [],
+      text: "Extracted page text",
+      message: null,
+    });
+    render(<PreviewPane material={docx} />);
+    screen.getByRole("button", { name: "Extracted text" }).click();
+    expect(await screen.findByText("Extracted page text")).toBeTruthy();
+    expect(document.querySelector("iframe")).toBeNull();
   });
 
   it("renders the slide-text fallback in slide order", () => {

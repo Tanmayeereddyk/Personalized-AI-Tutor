@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+.git
+.pytest_cache
+__pycache__
+*.py[cod]
+node_modules
+dist
+.output
+.tanstack
+.wrangler
+tests
+src
+package.json
+package-lock.json
+bun.lock

@@ -49,6 +49,7 @@ logger = logging.getLogger("studyai.preview")
 
 BUCKET = "materials"
 PREVIEW_FILENAME = "preview.pdf"
+MAX_PREVIEW_SOURCE_BYTES = 100 * 1024 * 1024
 
 _NO_LIBREOFFICE = (
     "Inline rendering needs LibreOffice on the server, which is not "
@@ -188,13 +189,19 @@ def _is_plain_text(material: dict) -> bool:
     return (material.get("name") or "").lower().endswith(".txt")
 
 
-def _pdf_state(client: Client, path: str) -> dict:
+def _pdf_state(
+    client: Client,
+    path: str,
+    *,
+    slides: list[dict] | None = None,
+    text: str | None = None,
+) -> dict:
     return {
         "status": "ready",
         "mode": "pdf",
         "url": _signed_url(client, path),
-        "slides": [],
-        "text": None,
+        "slides": slides or [],
+        "text": text,
         "message": None,
     }
 
@@ -269,7 +276,9 @@ def preview_state(client: Client, user_id: str, material_id: str) -> dict:
 
     path = material.get("preview_path") or preview_path(material)
     if _preview_object_exists(client, path):
-        return _pdf_state(client, path)
+        if _is_presentation(material):
+            return _pdf_state(client, path, slides=_slides(client, user_id, material_id))
+        return _pdf_state(client, path, text=_document_text(client, user_id, material_id))
 
     local = _PREVIEW_STAGES.get(material_id) or {}
     status = local.get("status") or material.get("preview_status")
@@ -367,7 +376,17 @@ def run_preview_conversion(client: Client, user_id: str, material_id: str) -> No
                 return
 
             try:
+                if (material.get("size_bytes") or 0) > MAX_PREVIEW_SOURCE_BYTES:
+                    raise PreviewError(
+                        "This file is too large for server-side inline conversion "
+                        "(maximum 100 MB). Download the original to view it."
+                    )
                 content = extractors.download_material(client, material)
+                if len(content) > MAX_PREVIEW_SOURCE_BYTES:
+                    raise PreviewError(
+                        "This file is too large for server-side inline conversion "
+                        "(maximum 100 MB). Download the original to view it."
+                    )
                 pdf = convert_to_pdf(soffice, content, material.get("name") or "slides.pptx")
                 path = preview_path(material)
                 client.storage.from_(BUCKET).upload(

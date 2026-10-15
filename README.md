@@ -207,6 +207,21 @@ notes. Only the rendered-PDF preview and legacy `.doc` extraction
 need LibreOffice. Point `LIBREOFFICE_PATH` at the binary only if
 it lives somewhere non-standard.
 
+For Render, this repository has a backend `Dockerfile` that installs the
+LibreOffice Writer and Impress components used for DOC/DOCX/PPT/PPTX-to-PDF
+previews. The repository does not contain a Render Blueprint, so the current
+service runtime is controlled in the Render dashboard. To enable conversion,
+set the backend Web Service runtime to **Docker** and use the repository-root
+`Dockerfile`, then deploy. Keep the existing Supabase and frontend-origin
+environment variables configured as Render secrets/environment settings; no
+credentials are copied into the image. If the service remains on Render's
+native Python runtime, the Office preview continues to use the text/slide
+fallback when LibreOffice is unavailable.
+
+Server-side Office previews are limited to source and output files of 100 MB
+and conversions time out after four minutes. Original files remain in private
+Supabase Storage and can still be downloaded at the bucket's configured limit.
+
 > **Supported material formats**
 >
 > | Format | Extracts text | Inline preview | Generates notes |
@@ -218,6 +233,8 @@ it lives somewhere non-standard.
 > | video (audio) | ✅ transcript | ✅ player | ✅ |
 > | `.ppt` (legacy) | ❌ | ✅ PDF (LibreOffice) | ❌ |
 > | `.doc` (legacy) | ⚠️ needs LibreOffice | ✅ PDF (LibreOffice) | ⚠️ needs LibreOffice |
+> | images (`image/*`) | — | ✅ browser image viewer | — |
+> | audio (`audio/*`) | transcript when extracted | ✅ browser audio player | — |
 > | anything else | ❌ | ❌ | ❌ |
 
 ### Step 3 — Start the frontend (separate terminal)

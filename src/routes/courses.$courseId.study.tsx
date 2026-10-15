@@ -26,6 +26,8 @@ import { FullScreenPage } from "@/components/layout/FullScreenPage";
 import { EmptyState } from "@/components/ui/kit";
 import { AudioTranscript } from "@/components/materials/AudioTranscript";
 import { PreviewPane } from "@/components/materials/PreviewPane";
+import { PdfViewer } from "@/components/materials/PdfViewer";
+import { ImagePreview } from "@/components/materials/ImagePreview";
 import { CourseTutor } from "@/components/tutor/CourseTutor";
 import { NotesPanel } from "@/components/tutor/NotesPanel";
 import { useMediaQuery } from "@/lib/use-media-query";
@@ -767,7 +769,13 @@ function Reader({
       </div>
       <div className="flex min-h-0 flex-1 overflow-auto bg-surface-2">
         {material.type === "pdf" ? (
-          <iframe key={key} src={url} title={material.name} className="h-full w-full" />
+          <PdfViewer key={key} src={url} title={material.name} />
+        ) : material.mimeType?.startsWith("image/") ? (
+          <ImagePreview src={url} alt={material.name} />
+        ) : material.mimeType?.startsWith("audio/") ? (
+          <div className="m-auto w-full max-w-2xl p-6">
+            <audio controls preload="metadata" src={url} className="w-full" aria-label={material.name} />
+          </div>
         ) : material.type === "ppt" || material.type === "doc" ? (
           <PreviewPane material={material} />
         ) : material.type === "video" ? (
