@@ -50,7 +50,9 @@ def _attempt_detail(row: dict) -> QuizAttemptDetail:
         score=int(row.get("score") or 0),
         total=int(row.get("total") or 0),
         percentage=int(row.get("percentage") or 0),
-        source=row.get("source") or ("ai" if submitted_at else "manual"),
+        # quiz_set_id is the durable marker for generated attempts. Legacy rows
+        # may predate ``source`` and ``submitted_at`` but remain owner-viewable.
+        source=row.get("source") or ("ai" if row.get("quiz_set_id") else "manual"),
         submitted_at=submitted_at,
         created_at=row.get("created_at"),
         results=[QuizResultItem.model_validate(item) for item in (row.get("results") or [])],

@@ -17,6 +17,7 @@ import {
   useCreateDeck,
   useCreateFlashcard,
   useDeleteFlashcard,
+  useDeleteFlashcardDeck,
   useFlashcardDecks,
   useFlashcards,
   useUpdateFlashcard,
@@ -41,6 +42,7 @@ function Flashcards() {
   const { courseId } = Route.useParams();
   const decks = useFlashcardDecks(courseId);
   const create = useCreateDeck(courseId);
+  const removeDeck = useDeleteFlashcardDeck(courseId);
   const generate = useGenerateFlashcardDeck(courseId);
   const topics = useTopics(courseId);
   const list = decks.data ?? [];
@@ -52,8 +54,21 @@ function Flashcards() {
   const [difficulty, setDifficulty] = useState<"Easy" | "Medium" | "Hard">("Medium");
   const [manualCards, setManualCards] = useState([{ ...blankCard }]);
   const [deck, setDeck] = useState<{ id: string; topic: string } | null>(null);
+  const [deckToDelete, setDeckToDelete] = useState<{ id: string; name: string } | null>(null);
 
   const openDeck = (id: string, topic: string) => setDeck({ id, topic });
+
+  const deleteDeck = async () => {
+    if (!deckToDelete || removeDeck.isPending) return;
+    try {
+      await removeDeck.mutateAsync(deckToDelete.id);
+      if (deck?.id === deckToDelete.id) setDeck(null);
+      setDeckToDelete(null);
+      toast.success("Flashcard deck deleted.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete the flashcard deck.");
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,12 +140,31 @@ function Flashcards() {
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {list.map((d, i) => (
-            <button
+            <div
               key={d.id}
+              role="button"
+              tabIndex={0}
               className="group relative fade-up text-left"
               style={{ animationDelay: `${i * 50}ms` }}
               onClick={() => openDeck(d.id, d.name || d.topic)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openDeck(d.id, d.name || d.topic);
+                }
+              }}
             >
+              <button
+                type="button"
+                aria-label={`Delete ${d.name || d.topic} flashcard deck`}
+                className="absolute right-3 top-3 z-10 rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setDeckToDelete({ id: d.id, name: d.name || d.topic });
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
               <div className="card absolute inset-0 translate-x-2 translate-y-2 opacity-40 transition group-hover:translate-x-3 group-hover:translate-y-3" />
               <div className="card absolute inset-0 translate-x-1 translate-y-1 opacity-70 transition group-hover:translate-x-1.5 group-hover:translate-y-1.5" />
               <div className="card relative flex flex-col p-5">
@@ -141,7 +175,7 @@ function Flashcards() {
                   Last reviewed: {d.lastReviewed}
                 </div>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -183,6 +217,20 @@ function Flashcards() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={!!deckToDelete}
+        onOpenChange={(next) => !next && !removeDeck.isPending && setDeckToDelete(null)}
+        title="Delete flashcard deck?"
+        description="Are you sure you want to delete this flashcard deck? This action cannot be undone."
+      >
+        <div className="flex justify-end gap-2">
+          <button className="btn btn-ghost" onClick={() => setDeckToDelete(null)} disabled={removeDeck.isPending}>Cancel</button>
+          <button className="btn bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => void deleteDeck()} disabled={removeDeck.isPending}>
+            {removeDeck.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Delete
+          </button>
+        </div>
       </Modal>
     </div>
   );

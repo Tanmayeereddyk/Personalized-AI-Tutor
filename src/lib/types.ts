@@ -147,6 +147,7 @@ export interface Quiz {
   scopeLabel?: string | null | undefined;
   submittedAt?: string | null | undefined;
   answers?: QuizAnswer[] | undefined;
+  results?: QuizResult[] | undefined;
 }
 
 export interface QuizAnswer {
@@ -154,6 +155,12 @@ export interface QuizAnswer {
   topicId: string | null;
   answered: boolean;
   isCorrect: boolean | null;
+}
+
+export interface QuizResult {
+  id: string;
+  given: string;
+  correct: boolean;
 }
 
 export interface FlashcardDeck { id: string; courseId: string; name?: string | null | undefined; topic: string; cards: number; lastReviewed: string }

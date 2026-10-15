@@ -236,6 +236,31 @@ def test_attempt_appears_in_history_and_can_be_reopened(
     assert all(item["correct_answer"] for item in detail["results"])
 
 
+def test_legacy_ai_attempt_without_source_or_results_can_be_reopened(
+    client, fake_supabase, logged_in_user, monkeypatch
+) -> None:
+    user, headers = logged_in_user
+    course_id, _material, topic_id = _course_with_topic(client, fake_supabase, user, headers)
+    _stub_questions(monkeypatch, _question_payload(2))
+    generated = _generate(client, headers, course_id, topic_id)
+    key = _stored_key(fake_supabase)
+    attempt_id = client.post(
+        SUBMIT.format(set_id=generated["set_id"]),
+        json={"answers": [{"question_id": q["id"], "answer": q["correct_answer"]} for q in key]},
+        headers=headers,
+    ).json()["id"]
+
+    stored = next(row for row in fake_supabase.tables["quizzes"] if row["id"] == attempt_id)
+    stored["source"] = None
+    stored["submitted_at"] = None
+    stored["results"] = []
+
+    reopened = client.get(RESULT.format(attempt_id=attempt_id), headers=headers)
+    assert reopened.status_code == 200, reopened.text
+    assert reopened.json()["source"] == "ai"
+    assert len(reopened.json()["results"]) == 2
+
+
 def test_another_user_cannot_submit_or_reopen(
     client, fake_supabase, logged_in_user, monkeypatch
 ) -> None:

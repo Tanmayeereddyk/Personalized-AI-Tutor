@@ -26,7 +26,6 @@ const state = vi.hoisted(() => ({
     error: null as Error | null,
     refetch: vi.fn(),
   },
-  quizzes: { data: [] as unknown[] },
   generate: {
     mutateAsync: vi.fn(async () => []),
     isPending: false,
@@ -74,7 +73,6 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/lib/queries", () => ({
   useTopics: () => state.topics,
   useMaterials: () => state.materials,
-  useQuizzes: () => state.quizzes,
   useGenerateTopics: () => state.generate,
   useRefreshTopics: () => state.refresh,
 }));

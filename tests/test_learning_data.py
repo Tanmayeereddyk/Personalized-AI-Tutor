@@ -222,6 +222,32 @@ def test_quiz_list_preserves_null_percentage_and_source(
     assert listed["source"] is None
 
 
+def test_quiz_list_includes_saved_graded_results_for_mastery(
+    client, fake_supabase, logged_in_user
+) -> None:
+    _, headers = logged_in_user
+    course_id = _course(client, headers)
+    quiz = client.post(
+        f"/api/courses/{course_id}/quizzes",
+        json={"name": "Generated practice"},
+        headers=headers,
+    ).json()
+    stored = next(row for row in fake_supabase.tables["quizzes"] if row["id"] == quiz["id"])
+    stored.update({
+        "source": "ai",
+        "results": [
+            {"id": "q1", "given": "answer", "correct": True},
+            {"id": "q2", "given": "wrong", "correct": False},
+        ],
+    })
+
+    response = client.get(f"/api/courses/{course_id}/quizzes", headers=headers)
+
+    assert response.status_code == 200, response.text
+    listed = next(row for row in response.json() if row["id"] == quiz["id"])
+    assert listed["results"] == stored["results"]
+
+
 def test_quiz_attempt_rejects_topic_from_another_course(client, fake_supabase, logged_in_user) -> None:
     user, headers = logged_in_user
     course_id = _course(client, headers)

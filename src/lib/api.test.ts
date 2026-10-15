@@ -17,6 +17,7 @@ import {
   toMaterial,
   toNote,
   toTutorAnswer,
+  toQuiz,
   toTopic,
 } from "./api";
 
@@ -24,6 +25,37 @@ const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 describe("dto mapping", () => {
+  it("maps saved graded quiz results for mastery", () => {
+    const quiz = toQuiz({
+      id: "qz1",
+      user_id: "u1",
+      course_id: "c1",
+      name: "Practice",
+      topic: null,
+      difficulty: "Medium",
+      score: 1,
+      total: 2,
+      percentage: 50,
+      quiz_set_id: "set1",
+      scope_label: null,
+      source: "ai",
+      submitted_at: null,
+      created_at: null,
+      updated_at: null,
+      answers: { q1: "right" },
+      results: [
+        { id: "q1", given: "right", correct: true },
+        { id: "q2", given: "wrong", correct: false },
+      ],
+    });
+
+    expect(quiz.results).toEqual([
+      { id: "q1", given: "right", correct: true },
+      { id: "q2", given: "wrong", correct: false },
+    ]);
+    expect(quiz.answers).toBeUndefined();
+  });
+
   it("maps a course row to the UI shape with zeroed derived stats", () => {
     const course = toCourse({
       id: "c1",
@@ -487,11 +519,12 @@ describe("RAG api client", () => {
 
   it("fetches the note PDF with the bearer token attached", async () => {
     localStorage.setItem("studyai.token", "tok-abc");
-    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
-      new Response(new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46])]), {
-        status: 200,
-        headers: { "Content-Type": "application/pdf" },
-      }),
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46])]), {
+          status: 200,
+          headers: { "Content-Type": "application/pdf" },
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -543,18 +576,14 @@ describe("topics api client", () => {
 
   it("lists the course topics with the bearer token attached", async () => {
     localStorage.setItem("studyai.token", "tok-abc");
-    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
-      jsonResponse([topicRow]),
-    );
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse([topicRow]));
     vi.stubGlobal("fetch", fetchMock);
 
     const topics = await api.topics.list("c1");
 
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toContain("/api/courses/c1/topics");
-    expect((init?.headers as Record<string, string>)["Authorization"]).toBe(
-      "Bearer tok-abc",
-    );
+    expect((init?.headers as Record<string, string>)["Authorization"]).toBe("Bearer tok-abc");
     expect(topics).toHaveLength(1);
     expect(topics[0]).toMatchObject({
       id: "t1",
@@ -569,9 +598,7 @@ describe("topics api client", () => {
 
   it("generates topics with POST and maps the saved rows", async () => {
     localStorage.setItem("studyai.token", "tok-abc");
-    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
-      jsonResponse([topicRow]),
-    );
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse([topicRow]));
     vi.stubGlobal("fetch", fetchMock);
 
     const topics = await api.topics.generate("c1");
@@ -584,9 +611,7 @@ describe("topics api client", () => {
 
   it("refreshes topics with POST to the refresh endpoint", async () => {
     localStorage.setItem("studyai.token", "tok-abc");
-    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
-      jsonResponse([topicRow]),
-    );
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse([topicRow]));
     vi.stubGlobal("fetch", fetchMock);
 
     const topics = await api.topics.refresh("c1");
@@ -599,9 +624,7 @@ describe("topics api client", () => {
 
   it("fetches one topic by id", async () => {
     localStorage.setItem("studyai.token", "tok-abc");
-    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
-      jsonResponse(topicRow),
-    );
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse(topicRow));
     vi.stubGlobal("fetch", fetchMock);
 
     const topic = await api.topics.get("t1");
@@ -640,9 +663,7 @@ describe("topics api client", () => {
       ),
     );
 
-    await expect(api.topics.generate("c1")).rejects.toThrow(
-      "No indexed content yet",
-    );
+    await expect(api.topics.generate("c1")).rejects.toThrow("No indexed content yet");
   });
 
   it("surfaces the LLM-not-configured message on 503 without crashing", async () => {
@@ -662,9 +683,7 @@ describe("topics api client", () => {
     localStorage.setItem("studyai.token", "tok-abc");
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        jsonResponse({ detail: "The language model returned no topics." }, 502),
-      ),
+      vi.fn(async () => jsonResponse({ detail: "The language model returned no topics." }, 502)),
     );
 
     await expect(api.topics.generate("c1")).rejects.toThrow(

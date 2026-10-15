@@ -126,10 +126,25 @@ def get_quiz_set(client: Client, user_id: str, set_id: str) -> dict:
 
 
 def get_attempt(client: Client, user_id: str, attempt_id: str) -> dict:
-    """The owner's saved attempt, or 404."""
+    """The owner's saved attempt, repairing legacy AI result detail if needed."""
     row = _fetch_one(client, "quizzes", id=attempt_id, user_id=user_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Not found")
+    # Older generated attempts predate the persisted ``results`` payload and
+    # sometimes have no ``source`` marker. Their quiz_set_id is authoritative:
+    # it is written only by the server-side AI submit flow. Re-grade from that
+    # owner-scoped set so those students can still open their saved quiz.
+    if row.get("quiz_set_id") and not row.get("results"):
+        quiz_set = get_quiz_set(client, user_id, str(row["quiz_set_id"]))
+        questions = quiz_set.get("questions")
+        answers = row.get("answers")
+        if isinstance(questions, list) and isinstance(answers, dict):
+            answer_rows = [
+                {"question_id": question_id, "answer": answer}
+                for question_id, answer in answers.items()
+            ]
+            results, _score = grade(questions, answer_rows)
+            return {**row, "source": row.get("source") or "ai", "results": results}
     return row
 
 

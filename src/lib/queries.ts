@@ -406,6 +406,22 @@ export const useGenerateFlashcardDeck = (courseId: string) => {
   });
 };
 
+/** Delete only a deck owned by the signed-in user. Its cards cascade in the DB. */
+export const useDeleteFlashcardDeck = (courseId: string) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (deckId: string) => api.decks.remove(deckId),
+    onSuccess: (_result, deckId) => {
+      queryClient.setQueryData<import("./types").FlashcardDeck[]>(
+        ["flashcard-decks", user?.id, courseId],
+        (current) => current?.filter((deck) => deck.id !== deckId),
+      );
+      queryClient.removeQueries({ queryKey: ["flashcards", user?.id, deckId] });
+    },
+  });
+};
+
 export const useFlashcards = (deckId: string) => {
   const { user } = useAuth();
   return useQuery({
