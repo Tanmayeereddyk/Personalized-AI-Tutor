@@ -134,6 +134,13 @@ def _course_scoped_router(
         user: AuthUser = Depends(get_current_user),
         db: Client = Depends(get_service_supabase),
     ) -> Response:
+        # PostgreSQL cascades this relationship, but explicit owner-scoped
+        # cleanup also keeps non-Postgres test/dev stores honest and never
+        # touches cards outside the selected deck.
+        if table == "flashcard_decks":
+            deck = owned_service.get_item(db, user.id, table, item_id)
+            for card in owned_service.list_items(db, user.id, "flashcards", deck_id=deck["id"]):
+                owned_service.delete_item(db, user.id, "flashcards", card["id"])
         owned_service.delete_item(db, user.id, table, item_id)
         return Response(status_code=204)
 

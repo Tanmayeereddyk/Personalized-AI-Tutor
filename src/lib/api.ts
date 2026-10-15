@@ -735,7 +735,9 @@ export const toQuiz = (dto: QuizDto): Quiz => ({
   total: dto.total,
   date: friendlyDate(dto.created_at),
   percentage: dto.percentage,
-  source: dto.source,
+  // Legacy generated attempts can lack `source`; their persisted quiz-set link
+  // is sufficient proof that they are safe to open through the AI result API.
+  source: dto.source ?? (dto.quiz_set_id ? "ai" : "manual"),
   quizSetId: dto.quiz_set_id,
   scopeLabel: dto.scope_label,
   submittedAt: dto.submitted_at,
@@ -1323,6 +1325,9 @@ export const api = {
     },
     async generate(courseId: string, input: { deck_name: string; topic_ids: string[]; cards_per_topic: number; difficulty: "Easy" | "Medium" | "Hard" }) {
       return request<{ deck: DeckDto; cards: FlashcardDto[]; topics: { topic_id: string; topic: string; requested: number; generated: number; message?: string | null }[]; message?: string | null }>(`/api/courses/${courseId}/flashcard-decks/generate`, { method: "POST", body: input });
+    },
+    async remove(id: string): Promise<void> {
+      await request(`/api/flashcard-decks/${id}`, { method: "DELETE" });
     },
   },
   flashcards: {

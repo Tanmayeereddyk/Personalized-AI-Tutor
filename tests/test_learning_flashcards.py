@@ -52,3 +52,13 @@ def test_cannot_access_another_users_flashcards(client, fake_supabase, logged_in
     assert client.get(f"/api/flashcards/{their_card["id"]}", headers=headers).status_code == 404
     assert client.put(f"/api/flashcards/{their_card["id"]}", json={"front":"x"}, headers=headers).status_code == 404
     assert client.delete(f"/api/flashcards/{their_card["id"]}", headers=headers).status_code == 404
+
+
+def test_deck_delete_is_owner_scoped_and_cascades_cards(client, fake_supabase, logged_in_user):
+    _, headers = logged_in_user
+    course_id = _course(client, headers)
+    deck_id = _deck(client, headers, course_id)
+    client.post(f"/api/decks/{deck_id}/flashcards", json={"front": "Q", "back": "A"}, headers=headers)
+    assert client.delete(f"/api/flashcard-decks/{deck_id}", headers=headers).status_code == 204
+    assert client.get(f"/api/flashcard-decks/{deck_id}", headers=headers).status_code == 404
+    assert not [card for card in fake_supabase.tables.get("flashcards", []) if card["deck_id"] == deck_id]

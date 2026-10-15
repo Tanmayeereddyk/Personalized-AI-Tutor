@@ -32,9 +32,8 @@ export function Quizzes() {
   const [confirming, setConfirming] = useState<Quiz | null>(null);
   // A saved attempt opened for review (its answers, answers key and explanations).
   const [viewing, setViewing] = useState<Quiz | null>(null);
-  const viewingResult = useQuizResult(
-    viewing && viewing.source === "ai" ? viewing.id : null,
-  );
+  const viewingIsAi = !!viewing && (viewing.source === "ai" || !!viewing.quizSetId);
+  const viewingResult = useQuizResult(viewingIsAi && viewing ? viewing.id : null);
 
   // Which row's delete button shows a spinner, if a delete is in flight.
   const deletingId = removeQuiz.isPending ? (removeQuiz.variables ?? null) : null;
@@ -182,7 +181,7 @@ export function Quizzes() {
         }
       >
         {viewing ? (
-          viewing.source === "ai" ? (
+          viewingIsAi ? (
             viewingResult.isLoading ? (
               <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
