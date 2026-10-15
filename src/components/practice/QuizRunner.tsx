@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -212,9 +213,11 @@ export function QuizRunner({ quiz, onSubmit, onExit }: QuizRunnerProps) {
   const question = quiz.questions[index];
   const title = phase === "taking" ? quiz.title : "Quiz results";
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal((
     <div
-      className="fixed inset-0 z-40 flex flex-col bg-background"
+      className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-background sm:inset-[5vh_2.5vw] sm:rounded-2xl sm:border sm:shadow-2xl"
       role="dialog"
       aria-modal="true"
       aria-labelledby="quiz-session-title"
@@ -276,8 +279,8 @@ export function QuizRunner({ quiz, onSubmit, onExit }: QuizRunnerProps) {
 
       {phase === "taking" && question ? (
         <>
-          <div ref={scrollRef} className="flex-1 overflow-y-auto">
-            <div className="mx-auto flex w-full max-w-5xl gap-6 px-4 py-6 sm:px-6">
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto flex w-full gap-4 px-4 py-6 sm:gap-6 sm:px-6 lg:px-8">
               <main className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm text-muted-foreground">
@@ -311,7 +314,7 @@ export function QuizRunner({ quiz, onSubmit, onExit }: QuizRunnerProps) {
                   </div>
                 ) : null}
 
-                <article className="card mt-6 p-5 sm:p-6">
+                <article className="card mt-6 p-4 sm:p-6">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="chip">{labelForQuestionType(question.type)}</span>
                     <span className="chip">{quiz.difficulty}</span>
@@ -352,8 +355,8 @@ export function QuizRunner({ quiz, onSubmit, onExit }: QuizRunnerProps) {
             </div>
           </div>
 
-          <footer className="border-t bg-background/85 backdrop-blur">
-            <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <footer className="shrink-0 border-t bg-background/85 backdrop-blur">
+            <div className="mx-auto flex w-full items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -388,8 +391,8 @@ export function QuizRunner({ quiz, onSubmit, onExit }: QuizRunnerProps) {
           </footer>
         </>
       ) : phase === "results" && attempt ? (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full px-4 py-8 sm:px-6 lg:px-8">
             {reason === "timeout" ? (
               <p className="mb-4 flex items-center justify-center gap-2 text-sm text-warning">
                 <Timer className="h-4 w-4" />
@@ -415,7 +418,7 @@ export function QuizRunner({ quiz, onSubmit, onExit }: QuizRunnerProps) {
           </div>
         </div>
       ) : (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-md px-4 py-16 sm:px-6">
             {error ? (
               <div className="card p-6 text-center">
@@ -491,7 +494,7 @@ export function QuizRunner({ quiz, onSubmit, onExit }: QuizRunnerProps) {
         </div>
       </Modal>
     </div>
-  );
+  ), document.body);
 }
 
 function AnswerControl({

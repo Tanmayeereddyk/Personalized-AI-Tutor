@@ -97,6 +97,7 @@ export function Modal({ open, onOpenChange, title, description, children, wide, 
         <Dialog.Content
           className={cn(
             "card fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto bg-popover p-6 outline-none",
+            size === "full" && "flex h-[90vh] flex-col overflow-hidden",
             "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
             width,
           )}
@@ -108,7 +109,9 @@ export function Modal({ open, onOpenChange, title, description, children, wide, 
             </div>
             <Dialog.Close className="rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"><X className="h-4 w-4" /></Dialog.Close>
           </div>
-          {children}
+          {size === "full" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          ) : children}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

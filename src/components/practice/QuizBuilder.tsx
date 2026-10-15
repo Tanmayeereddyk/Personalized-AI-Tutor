@@ -128,7 +128,7 @@ export function QuizBuilder({ open, onOpenChange, courseId, onGenerated }: QuizB
     <Modal
       open={open}
       onOpenChange={handleOpenChange}
-      size="xl"
+      size="full"
       title={step === "topics" ? "Choose topics" : "Configure your quiz"}
       description={
         step === "topics"
